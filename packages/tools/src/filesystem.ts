@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, readdirSync, mkdirSync, unlinkSync, statSync } from 'fs';
+import { readFileSync, writeFileSync, readdirSync, mkdirSync, unlinkSync, statSync, realpathSync } from 'fs';
 import { resolve, normalize, relative } from 'path';
 import type { ITool, ToolContext, ToolResult, ValidationResult, ToolPermission } from './interface.js';
 
@@ -24,6 +24,20 @@ export class FilesystemTool implements ITool {
     const rel = relative(this.sandboxRoot, abs);
     if (rel.startsWith('..') || normalize(rel) === '..') {
       throw new Error(`Path traversal rejected: ${inputPath}`);
+    }
+    // Resolve symlinks to their real path and re-check sandbox boundary.
+    // This prevents symlink escape attacks (e.g. a symlink inside the sandbox
+    // pointing to /etc/passwd would pass the first check but fail this one).
+    try {
+      const real = realpathSync(abs);
+      const realRel = relative(this.sandboxRoot, real);
+      if (realRel.startsWith('..') || normalize(realRel) === '..') {
+        throw new Error(`Symlink escape rejected: ${inputPath} resolves outside sandbox`);
+      }
+    } catch (err) {
+      // If the path doesn't exist yet (write_file to new file), realpathSync throws.
+      // Only propagate if it's our sandbox violation error.
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
     }
     return abs;
   }

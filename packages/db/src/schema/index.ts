@@ -40,11 +40,3 @@ export const conversationThreads = pgTable('conversation_threads', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
-export const auditEvents = pgTable('audit_events', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  deliberationId: text('deliberation_id').notNull(),
-  eventType: text('event_type').notNull(),
-  agentRole: text('agent_role'),
-  detail: jsonb('detail'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-});

@@ -13,6 +13,7 @@ import { IntegrationEngine } from '@consensus/agent-manager';
 import { PRWorkflow } from '@consensus/agent-manager';
 import { CreateProjectRequestSchema } from '@consensus/shared-types';
 import { eq } from 'drizzle-orm';
+import { auditLog } from '@consensus/audit-log';
 
 const app = express();
 app.use(express.json());
@@ -62,6 +63,14 @@ app.post('/projects', async (req, res) => {
   });
 
   res.status(202).json({ projectId, status: 'running' });
+
+  await auditLog.append({
+    projectId,
+    actorType: 'user',
+    actionType: 'project_created',
+    inputSummary: `mode=${projectReq.mode} agents=${projectReq.agents.length} task=${projectReq.task.slice(0, 100)}`,
+    approvalStatus: 'not_required',
+  }).catch(() => {});
 
   // Run in background
   (async () => {
@@ -152,6 +161,13 @@ app.post('/projects', async (req, res) => {
       await getDb().update(projects)
         .set({ status: 'error' })
         .where(eq(projects.id, projectId));
+      await auditLog.append({
+        projectId,
+        actorType: 'system',
+        actionType: 'project_error',
+        outputSummary: String(err).slice(0, 300),
+        approvalStatus: 'not_required',
+      }).catch(() => {});
     }
   })();
 });
@@ -181,6 +197,18 @@ app.post('/projects/:id/override', async (req, res) => {
     .set({ status: req.body.status ?? 'complete' })
     .where(eq(projects.id, req.params.id));
   res.json({ ok: true });
+});
+
+// Audit log endpoints
+app.get('/projects/:id/audit-events', async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit as string ?? '100'), 500);
+  const events = await auditLog.getEvents(req.params.id, limit);
+  res.json(events);
+});
+
+app.get('/audit/verify', async (_req, res) => {
+  const result = await auditLog.verify();
+  res.json(result);
 });
 
 // Permission approval flow

@@ -13,12 +13,18 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.36.0
         version: 0.36.3
+      '@consensus/audit-log':
+        specifier: workspace:*
+        version: link:../audit-log
       '@consensus/db':
         specifier: workspace:*
         version: link:../db
       '@consensus/permissions':
         specifier: workspace:*
         version: link:../permissions
+      '@consensus/secrets':
+        specifier: workspace:*
+        version: link:../secrets
       '@consensus/shared-types':
         specifier: workspace:*
         version: link:../shared-types
@@ -50,6 +56,9 @@ importers:
       '@consensus/agent-manager':
         specifier: workspace:*
         version: link:../agent-manager
+      '@consensus/audit-log':
+        specifier: workspace:*
+        version: link:../audit-log
       '@consensus/db':
         specifier: workspace:*
         version: link:../db
@@ -94,6 +103,19 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
+  packages/audit-log:
+    dependencies:
+      '@consensus/db':
+        specifier: workspace:*
+        version: link:../db
+      uuid:
+        specifier: ^11.0.0
+        version: 11.1.1
+    devDependencies:
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
   packages/db:
     dependencies:
       '@consensus/shared-types':
@@ -121,6 +143,9 @@ importers:
 
   packages/permissions:
     dependencies:
+      '@consensus/audit-log':
+        specifier: workspace:*
+        version: link:../audit-log
       '@consensus/db':
         specifier: workspace:*
         version: link:../db
@@ -137,6 +162,12 @@ importers:
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.21
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/secrets:
+    devDependencies:
       typescript:
         specifier: ^5.9.0
         version: 5.9.3

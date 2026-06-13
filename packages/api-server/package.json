@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@consensus/agent-manager": "workspace:*",
+    "@consensus/audit-log": "workspace:*",
     "@consensus/db": "workspace:*",
     "@consensus/shared-types": "workspace:*",
     "@consensus/permissions": "workspace:*",

@@ -6,6 +6,8 @@ import type { AgentRole, AgentProposal, AgentCritique, Vote, AgentResponse, Impl
 import { createProvider } from './provider-factory.js';
 import type { ITool, ToolContext, ToolResult } from '@consensus/tools';
 import { permissionEngine } from '@consensus/permissions';
+import { auditLog as globalAuditLog } from '@consensus/audit-log';
+import { summarise, redact } from '@consensus/secrets';
 
 export interface AgentConfig {
   provider: IAIProvider;
@@ -224,30 +226,36 @@ export class Agent {
       // with defaultDeny:true on the project will override this.
     }
 
-    const auditLog = this.config.auditLog ?? (async () => {});
+    const legacyAuditLog = this.config.auditLog ?? (async () => {});
     const context: ToolContext = {
       agentId: this.threadId,
       projectId: this.config.deliberationId,
       permissionLevel: permLevel,
-      auditLog,
+      auditLog: legacyAuditLog,
     };
 
     const result = await tool.execute(input, context);
 
-    // Append tool use + result to conversation thread so the agent sees what it did
+    // Append tool use + result to conversation thread — redact secrets in stored content
+    const safeInput = redact(JSON.stringify(input));
+    const safeOutput = redact(JSON.stringify(result.output));
     await conversationStore.appendExchange(
       this.threadId,
-      { role: 'user', content: `[tool_use] ${tool.name}: ${JSON.stringify(input)}` },
-      { role: 'assistant', content: `[tool_result] success=${result.success} output=${JSON.stringify(result.output)} ${result.error ? `error=${result.error}` : ''}` },
+      { role: 'user', content: `[tool_use] ${tool.name}: ${safeInput}` },
+      { role: 'assistant', content: `[tool_result] success=${result.success} output=${safeOutput}${result.error ? ` error=${result.error}` : ''}` },
     );
 
-    await auditLog('agent.useTool', {
-      agentRole: this.config.role,
-      tool: tool.name,
-      input,
-      success: result.success,
-      durationMs: result.metadata.durationMs,
-    });
+    // Write to immutable audit log with redacted summaries
+    await globalAuditLog.append({
+      projectId: this.config.deliberationId,
+      actorType: 'agent',
+      actorId: this.config.role,
+      actionType: 'tool_use',
+      toolName: tool.name,
+      inputSummary: summarise(input),
+      outputSummary: summarise(result.output),
+      approvalStatus: perm.allowed ? 'not_required' : 'denied',
+    }).catch(err => console.warn('[audit] Failed to write audit event:', err));
 
     return result;
   }

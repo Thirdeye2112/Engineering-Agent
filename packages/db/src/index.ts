@@ -3,12 +3,14 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import * as mainSchema from './schema/index.js';
 import * as projectsSchema from './schema/projects.js';
 import * as permissionsSchema from './schema/permissions.js';
+import * as auditSchema from './schema/audit.js';
 
 export * from './schema/index.js';
 export * from './schema/projects.js';
 export * from './schema/permissions.js';
+export * from './schema/audit.js';
 
-const schema = { ...mainSchema, ...projectsSchema, ...permissionsSchema };
+const schema = { ...mainSchema, ...projectsSchema, ...permissionsSchema, ...auditSchema };
 
 let _db: ReturnType<typeof drizzle> | null = null;
 

@@ -3,6 +3,7 @@ import { permissionRules, permissionRequests } from './schema.js';
 import { and, eq } from 'drizzle-orm';
 import type { AgentRole } from '@consensus/shared-types';
 import { v4 as uuidv4 } from 'uuid';
+import { auditLog } from '@consensus/audit-log';
 
 export interface PermissionRule {
   agentRole: AgentRole | '*';
@@ -72,6 +73,17 @@ export class PermissionEngine {
       status: 'pending',
     });
     this.onApprovalRequest?.(projectId, id, { agentRole, tool, operation, rationale });
+
+    await auditLog.append({
+      projectId,
+      actorType: 'agent',
+      actorId: agentRole,
+      actionType: 'permission_requested',
+      toolName: tool,
+      inputSummary: `${operation} — ${rationale.slice(0, 200)}`,
+      approvalStatus: 'pending',
+    }).catch(err => console.warn('[audit] permission_requested:', err));
+
     return { requestId: id };
   }
 
@@ -81,10 +93,23 @@ export class PermissionEngine {
     reviewedBy: string,
   ): Promise<void> {
     const db = getDb();
+    const req = await this.getRequest(requestId);
+    if (!req) throw new Error(`Permission request not found: ${requestId}`);
+
     await db
       .update(permissionRequests)
       .set({ status: decision, reviewedBy, reviewedAt: new Date() })
       .where(eq(permissionRequests.id, requestId));
+
+    await auditLog.append({
+      projectId: req.projectId,
+      actorType: 'user',
+      actorId: reviewedBy,
+      actionType: `permission_${decision}`,
+      toolName: req.tool,
+      inputSummary: `${req.operation} — request ${requestId}`,
+      approvalStatus: decision,
+    }).catch(err => console.warn('[audit] permission_resolved:', err));
   }
 
   async getRequest(requestId: string) {

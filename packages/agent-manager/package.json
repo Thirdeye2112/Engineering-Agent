@@ -7,7 +7,9 @@
     "build": "tsc"
   },
   "dependencies": {
+    "@consensus/audit-log": "workspace:*",
     "@consensus/db": "workspace:*",
+    "@consensus/secrets": "workspace:*",
     "@consensus/shared-types": "workspace:*",
     "@consensus/tools": "workspace:*",
     "@consensus/permissions": "workspace:*",

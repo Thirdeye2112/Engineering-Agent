@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { capitalize, truncate, camelCase } from './utils.js';
+import { capitalize, truncate, camelCase, slugify } from './utils.js';
 
 describe('capitalize', () => {
   it('capitalizes first letter', () => {
@@ -35,5 +35,23 @@ describe('camelCase', () => {
   });
   it('handles single word', () => {
     assert.equal(camelCase('Hello'), 'hello');
+  });
+});
+
+describe('slugify', () => {
+  it('lowercases and replaces spaces with hyphens', () => {
+    assert.equal(slugify('Hello World'), 'hello-world');
+  });
+  it('removes special characters', () => {
+    assert.equal(slugify('Hello, World!'), 'hello-world');
+  });
+  it('collapses consecutive hyphens', () => {
+    assert.equal(slugify('foo--bar'), 'foo-bar');
+  });
+  it('trims leading and trailing hyphens', () => {
+    assert.equal(slugify('  -hello-  '), 'hello');
+  });
+  it('replaces underscores with hyphens', () => {
+    assert.equal(slugify('foo_bar'), 'foo-bar');
   });
 });

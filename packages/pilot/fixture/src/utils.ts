@@ -1,6 +1,5 @@
 /**
  * String utility functions.
- * NOTE: slugify() is intentionally absent — it is the pilot task.
  */
 
 /** Capitalizes the first character of a string. */
@@ -20,4 +19,15 @@ export function camelCase(str: string): string {
   return str
     .toLowerCase()
     .replace(/[^a-zA-Z0-9]+(.)/g, (_, c: string) => c.toUpperCase());
+}
+
+/** Converts a string to a URL-safe slug. */
+export function slugify(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }

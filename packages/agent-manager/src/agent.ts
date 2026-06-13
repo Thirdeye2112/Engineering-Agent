@@ -91,7 +91,7 @@ export class Agent {
   }
 
   async propose(): Promise<AgentProposal> {
-    const { systemPrompt, userMessage } = buildProposalPrompt(this.config.role, this.config.task);
+    const { systemPrompt, userMessage } = buildProposalPrompt(this.config.role, this.config.task, this.config.tools ?? []);
     const raw = await this.call(systemPrompt, userMessage);
     const parsed = parseJSON<unknown>(raw, 'proposal');
     return AgentProposalSchema.parse(parsed);
@@ -141,8 +141,8 @@ export class Agent {
     );
 
     if (!perm.allowed) {
-      // Also enforce local permission level as a fallback guard
-      const requiredWrite = tool.permissions.includes('write');
+      // Hard block: tool requires write but agent only has read permission level
+      const requiredWrite = tool.permissions.includes('write') && !tool.permissions.includes('read');
       if (requiredWrite && permLevel === 'read') {
         return {
           success: false,
@@ -151,7 +151,8 @@ export class Agent {
           metadata: { durationMs: 0 },
         };
       }
-      // If no DB rule but local level permits, allow through (open project default)
+      // No DB rule found — default allow (open project). A future PermissionRule
+      // with defaultDeny:true on the project will override this.
     }
 
     const auditLog = this.config.auditLog ?? (async () => {});

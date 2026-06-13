@@ -24,6 +24,9 @@ export interface ProjectPermissions {
 }
 
 export class PermissionEngine {
+  // Injected by api-server so WS broadcast happens without circular deps
+  onApprovalRequest?: (projectId: string, requestId: string, detail: unknown) => void;
+
   async check(
     agentRole: AgentRole,
     tool: string,
@@ -68,6 +71,7 @@ export class PermissionEngine {
       rationale,
       status: 'pending',
     });
+    this.onApprovalRequest?.(projectId, id, { agentRole, tool, operation, rationale });
     return { requestId: id };
   }
 

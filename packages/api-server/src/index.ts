@@ -201,6 +201,11 @@ app.post('/credentials', (req, res) => {
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 
 async function start() {
+  // Wire permission approval broadcast into the permission engine
+  permissionEngine.onApprovalRequest = (projectId, requestId, detail) => {
+    broadcast(projectId, { type: 'permission_requested', requestId, detail });
+  };
+
   await conversationStore.connect();
   console.log('[Consensus AI] Redis connected');
 

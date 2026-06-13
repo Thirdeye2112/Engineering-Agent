@@ -20,6 +20,12 @@ export default function Sidebar() {
         <NavLink to="/dashboard" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
           <span>⬡</span> Dashboard
         </NavLink>
+        <NavLink to="/approvals" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+          <span>🔐</span> Approvals
+        </NavLink>
+        <NavLink to="/audit" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+          <span>🔍</span> Audit
+        </NavLink>
         <NavLink to="/credentials" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
           <span>🔑</span> Credentials
         </NavLink>

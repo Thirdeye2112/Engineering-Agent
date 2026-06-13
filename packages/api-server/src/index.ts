@@ -3,6 +3,7 @@ import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb, projects, subtasks, permissionRequests } from '@consensus/db';
+import { projectMemory } from '@consensus/memory';
 import { permissionEngine } from '@consensus/permissions';
 import { conversationStore } from '@consensus/agent-manager';
 import { createProvider } from '@consensus/agent-manager';
@@ -206,9 +207,76 @@ app.get('/projects/:id/audit-events', async (req, res) => {
   res.json(events);
 });
 
-app.get('/audit/verify', async (_req, res) => {
-  const result = await auditLog.verify();
+app.get('/audit/verify', async (req, res) => {
+  const projectId = req.query.projectId as string | undefined;
+  const result = await auditLog.verify(projectId);
   res.json(result);
+});
+
+// Approval queue — pending permission requests across all projects
+app.get('/approvals/pending', async (_req, res) => {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(permissionRequests)
+    .where(eq(permissionRequests.status, 'pending'))
+    .orderBy(permissionRequests.createdAt);
+  res.json(rows);
+});
+
+app.post('/approvals/:id/approve', async (req, res) => {
+  const { id } = req.params;
+  const reviewedBy = req.body.reviewedBy ?? 'human';
+  await permissionEngine.resolveRequest(id, 'approved', reviewedBy);
+  const request = await permissionEngine.getRequest(id);
+  if (request) broadcast(request.projectId, { type: 'permission_approved', requestId: id });
+  await auditLog.append({
+    projectId: request?.projectId,
+    actorType: 'user',
+    actorId: reviewedBy,
+    actionType: 'approval.granted',
+    inputSummary: `requestId=${id}`,
+    approvalStatus: 'approved',
+  }).catch(() => {});
+  res.json({ ok: true });
+});
+
+app.post('/approvals/:id/deny', async (req, res) => {
+  const { id } = req.params;
+  const reviewedBy = req.body.reviewedBy ?? 'human';
+  await permissionEngine.resolveRequest(id, 'denied', reviewedBy);
+  const request = await permissionEngine.getRequest(id);
+  if (request) broadcast(request.projectId, { type: 'permission_denied', requestId: id });
+  await auditLog.append({
+    projectId: request?.projectId,
+    actorType: 'user',
+    actorId: reviewedBy,
+    actionType: 'approval.denied',
+    inputSummary: `requestId=${id}`,
+    approvalStatus: 'denied',
+  }).catch(() => {});
+  res.json({ ok: true });
+});
+
+// Project workflow report (PR mode)
+app.get('/projects/:id/workflow-report', async (req, res) => {
+  const db = getDb();
+  const rows = await db.select().from(projects).where(eq(projects.id, req.params.id));
+  if (rows.length === 0) { res.status(404).json({ error: 'Not found' }); return; }
+  const project = rows[0];
+  if (!project.report) { res.status(404).json({ error: 'No report available' }); return; }
+  res.json(project.report);
+});
+
+// Project memories
+app.get('/projects/:id/memories', async (req, res) => {
+  const memories = await projectMemory.retrieve({
+    projectId: req.params.id,
+    includeExpired: req.query.includeExpired === 'true',
+    includeSuperseded: req.query.includeSuperseded === 'true',
+    limit: Math.min(parseInt((req.query.limit as string) ?? '100'), 500),
+  });
+  res.json(memories);
 });
 
 // Permission approval flow

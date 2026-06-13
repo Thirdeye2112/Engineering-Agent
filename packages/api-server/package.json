@@ -11,6 +11,7 @@
     "@consensus/audit-log": "workspace:*",
     "@consensus/db": "workspace:*",
     "@consensus/shared-types": "workspace:*",
+    "@consensus/memory": "workspace:*",
     "@consensus/permissions": "workspace:*",
     "express": "^5.0.0",
     "ws": "^8.18.0",

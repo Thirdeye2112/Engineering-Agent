@@ -43,6 +43,64 @@ export interface Report {
     toolCalls: Array<{ tool: string; operation: string; [key: string]: unknown }>;
     toolResults: Array<{ tool: string; success: boolean; output: unknown; error?: string }>;
   }>;
+  // Phase 3: code review + test plan
+  codeReview?: {
+    verdict: 'approve' | 'request_changes' | 'block';
+    rationale: string;
+    requiredFixes: string[];
+    riskLevel: string;
+    securityConcerns: string[];
+    testingGaps: string[];
+  };
+  testPlan?: {
+    requiredBeforePr: Array<{ description: string; type: string; priority: string }>;
+    recommended: Array<{ description: string; type: string; priority: string }>;
+    notApplicable: Array<{ description: string; type: string; priority: string }>;
+    summary: string;
+  };
+  patchPreviews?: Array<{
+    path: string;
+    originalSnippet: string;
+    proposedSnippet: string;
+    reason: string;
+    riskLevel: string;
+    reviewerVerdict?: string;
+  }>;
+  checklist?: {
+    taskSummary: string;
+    filesChanged: string[];
+    agentReasoning: string;
+    securityReviewPassed: boolean;
+    testPlanComplete: boolean;
+    humanApprovalsObtained: boolean;
+    auditChainValid: boolean;
+    codeReviewVerdict?: string;
+    testResults?: Array<{ profile: string; status: string; durationMs: number; error?: string }>;
+    requiredTestsPassed?: boolean;
+    blockers: string[];
+    warnings: string[];
+    readyToMerge: boolean;
+  };
+  // Phase 4: test results
+  testResults?: Array<{
+    profile: string;
+    status: string;
+    exitCode?: number | null;
+    stdout?: string;
+    stderr?: string;
+    durationMs: number;
+    truncated?: boolean;
+    label?: string;
+    error?: string;
+  }>;
+  // Phase 5: memory references
+  memoryReferences?: Array<{
+    memoryId: string;
+    category: string;
+    title: string;
+    confidence: number;
+    influence: string;
+  }>;
 }
 
 function SeverityDot({ s }: { s: string }) {
@@ -144,6 +202,174 @@ function PRWorkflowReportView({ report }: { report: Report }) {
               ))}
             </div>
           ))}
+        </div>
+      )}
+
+      {report.codeReview && (
+        <div className="report-section">
+          <h3>Code Review</h3>
+          <div className="card" style={{ borderColor: report.codeReview.verdict === 'approve' ? 'var(--green)' : report.codeReview.verdict === 'block' ? 'var(--red)' : 'var(--yellow)' }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+              <span className={`tag ${report.codeReview.verdict === 'approve' ? 'tag-complete' : report.codeReview.verdict === 'block' ? 'tag-error' : 'tag-pending'}`}>
+                {report.codeReview.verdict.replace('_', ' ')}
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase' }}>risk: {report.codeReview.riskLevel}</span>
+            </div>
+            <p style={{ fontSize: 13, marginBottom: 10 }}>{report.codeReview.rationale}</p>
+            {report.codeReview.requiredFixes.length > 0 && (
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--red)', marginBottom: 6 }}>Required fixes</div>
+                {report.codeReview.requiredFixes.map((f, i) => <div key={i} className="risk-item" style={{ background: 'rgba(239,68,68,0.08)', marginBottom: 4 }}>{f}</div>)}
+              </div>
+            )}
+            {report.codeReview.securityConcerns.length > 0 && (
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--yellow)', marginBottom: 6 }}>Security concerns</div>
+                {report.codeReview.securityConcerns.map((c, i) => <div key={i} className="risk-item" style={{ marginBottom: 4 }}>{c}</div>)}
+              </div>
+            )}
+            {report.codeReview.testingGaps.length > 0 && (
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Testing gaps</div>
+                {report.codeReview.testingGaps.map((g, i) => <div key={i} style={{ fontSize: 13, color: 'var(--text-muted)', paddingLeft: 8, borderLeft: '2px solid var(--border)', marginBottom: 4 }}>{g}</div>)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {report.testPlan && (
+        <div className="report-section">
+          <h3>Test Plan</h3>
+          <div className="card">
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>{report.testPlan.summary}</p>
+            {report.testPlan.requiredBeforePr.length > 0 && (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--red)', marginBottom: 6 }}>Required before PR</div>
+                {report.testPlan.requiredBeforePr.map((t, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, marginBottom: 4 }}>
+                    <span style={{ fontSize: 10, background: 'var(--border)', padding: '1px 6px', borderRadius: 3 }}>{t.type}</span>
+                    <span>{t.description}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {report.testPlan.recommended.length > 0 && (
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Recommended</div>
+                {report.testPlan.recommended.map((t, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, marginBottom: 4, color: 'var(--text-muted)' }}>
+                    <span style={{ fontSize: 10, background: 'var(--border)', padding: '1px 6px', borderRadius: 3 }}>{t.type}</span>
+                    <span>{t.description}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {(report.testResults?.length ?? 0) > 0 && (
+        <div className="report-section">
+          <h3>Test Results</h3>
+          <div className="card">
+            {report.testResults!.map((r, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8 }}>
+                <span className={`tag ${r.status === 'passed' ? 'tag-complete' : r.status === 'tests_not_configured' ? 'tag-pending' : 'tag-error'}`}>
+                  {r.status}
+                </span>
+                <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)' }}>{r.profile}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>{r.durationMs}ms</span>
+                {r.error && <span style={{ fontSize: 12, color: 'var(--red)' }}>{r.error}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(report.patchPreviews?.length ?? 0) > 0 && (
+        <div className="report-section">
+          <h3>Patch Previews</h3>
+          {report.patchPreviews!.map((p, i) => (
+            <div key={i} className="card" style={{ marginBottom: 12, borderColor: p.riskLevel === 'critical' ? 'var(--red)' : p.riskLevel === 'high' ? 'var(--orange)' : 'var(--border)' }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--accent)', flex: 1 }}>{p.path}</span>
+                <span style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--text-muted)' }}>risk: {p.riskLevel}</span>
+                {p.reviewerVerdict && (
+                  <span className={`tag ${p.reviewerVerdict === 'approve' ? 'tag-complete' : p.reviewerVerdict === 'block' ? 'tag-error' : 'tag-pending'}`}>
+                    {p.reviewerVerdict}
+                  </span>
+                )}
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>{p.reason}</p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--red)', marginBottom: 4 }}>BEFORE</div>
+                  <pre style={{ fontSize: 11, fontFamily: 'var(--font-mono)', background: 'rgba(239,68,68,0.06)', padding: 8, borderRadius: 4, overflow: 'auto', margin: 0 }}>{p.originalSnippet || '(empty)'}</pre>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)', marginBottom: 4 }}>AFTER</div>
+                  <pre style={{ fontSize: 11, fontFamily: 'var(--font-mono)', background: 'rgba(34,197,94,0.06)', padding: 8, borderRadius: 4, overflow: 'auto', margin: 0 }}>{p.proposedSnippet || '(empty)'}</pre>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {report.checklist && (
+        <div className="report-section">
+          <h3>Quality Checklist</h3>
+          <div className="card" style={{ borderColor: report.checklist.readyToMerge ? 'var(--green)' : 'var(--red)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <span className={`tag ${report.checklist.readyToMerge ? 'tag-complete' : 'tag-error'}`}>
+                {report.checklist.readyToMerge ? '✓ Ready to merge' : '✗ Not ready'}
+              </span>
+            </div>
+            {[
+              ['Security review', report.checklist.securityReviewPassed],
+              ['Test plan complete', report.checklist.testPlanComplete],
+              ['Human approvals', report.checklist.humanApprovalsObtained],
+              ['Audit chain valid', report.checklist.auditChainValid],
+              ['Tests passed', report.checklist.requiredTestsPassed ?? true],
+            ].map(([label, ok]) => (
+              <div key={label as string} style={{ display: 'flex', gap: 8, fontSize: 13, marginBottom: 6 }}>
+                <span style={{ color: ok ? 'var(--green)' : 'var(--red)' }}>{ok ? '✓' : '✗'}</span>
+                <span>{label as string}</span>
+              </div>
+            ))}
+            {report.checklist.blockers.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--red)', marginBottom: 6 }}>Blockers</div>
+                {report.checklist.blockers.map((b, i) => <div key={i} className="risk-item" style={{ background: 'rgba(239,68,68,0.08)', marginBottom: 4 }}>{b}</div>)}
+              </div>
+            )}
+            {report.checklist.warnings.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--yellow)', marginBottom: 6 }}>Warnings</div>
+                {report.checklist.warnings.map((w, i) => <div key={i} className="risk-item" style={{ marginBottom: 4 }}>{w}</div>)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {(report.memoryReferences?.length ?? 0) > 0 && (
+        <div className="report-section">
+          <h3>Memory References</h3>
+          <div className="card">
+            {report.memoryReferences!.map((m, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 8 }}>
+                <span className={`tag ${m.influence === 'applied' ? 'tag-complete' : m.influence === 'rejected_as_outdated' ? 'tag-error' : 'tag-pending'}`} style={{ fontSize: 10, flexShrink: 0 }}>
+                  {m.influence.replace(/_/g, ' ')}
+                </span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{m.title}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{m.category.replace(/_/g, ' ')} · {Math.round(m.confidence * 100)}% confidence</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

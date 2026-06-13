@@ -79,8 +79,9 @@ export default function ProjectView() {
   return (
     <div>
       <div className="page-header">
-        <div style={{ marginBottom: 10 }}>
+        <div style={{ marginBottom: 10, display: 'flex', gap: 16 }}>
           <Link to="/dashboard" style={{ fontSize: 12, color: 'var(--text-muted)' }}>← Dashboard</Link>
+          <Link to={`/audit?projectId=${id}`} style={{ fontSize: 12, color: 'var(--text-muted)' }}>Audit trail ↗</Link>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <h2 style={{ fontSize: 18, flex: 1, minWidth: 0 }}>{project.task}</h2>

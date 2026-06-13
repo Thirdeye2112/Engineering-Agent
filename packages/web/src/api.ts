@@ -54,3 +54,91 @@ export function openProjectSocket(projectId: string, onEvent: (e: unknown) => vo
   ws.onmessage = (msg) => { try { onEvent(JSON.parse(msg.data)); } catch { /* ignore */ } };
   return ws;
 }
+
+export interface PendingApprovalItem {
+  id: string;
+  projectId: string;
+  agentRole: string;
+  tool: string;
+  operation: string;
+  rationale: string;
+  status: string;
+  createdAt: string;
+}
+
+export async function fetchPendingApprovals(): Promise<PendingApprovalItem[]> {
+  const resp = await fetch(`${BASE}/approvals/pending`);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return resp.json();
+}
+
+export async function approveRequest(id: string): Promise<void> {
+  const resp = await fetch(`${BASE}/approvals/${id}/approve`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ reviewedBy: 'human' }),
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+}
+
+export async function denyRequest(id: string): Promise<void> {
+  const resp = await fetch(`${BASE}/approvals/${id}/deny`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ reviewedBy: 'human' }),
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+}
+
+export interface MemoryRecord {
+  id: string;
+  projectId: string;
+  category: string;
+  title: string;
+  content: string;
+  sourceType: string;
+  confidence: number;
+  createdAt: string;
+  expiresAt?: string;
+  supersededBy?: string;
+}
+
+export async function fetchProjectMemories(projectId: string): Promise<MemoryRecord[]> {
+  const resp = await fetch(`${BASE}/projects/${projectId}/memories`);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return resp.json();
+}
+
+export interface AuditVerifyResult {
+  valid: boolean;
+  firstInvalidId?: string;
+  checkedCount: number;
+}
+
+export async function verifyAuditChain(projectId?: string): Promise<AuditVerifyResult> {
+  const url = projectId ? `${BASE}/audit/verify?projectId=${projectId}` : `${BASE}/audit/verify`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return resp.json();
+}
+
+export interface AuditEvent {
+  id: string;
+  projectId?: string;
+  actorType: string;
+  actorId?: string;
+  actionType: string;
+  toolName?: string;
+  inputSummary?: string;
+  outputSummary?: string;
+  approvalStatus?: string;
+  eventHash: string;
+  previousEventHash: string;
+  createdAt: string;
+}
+
+export async function fetchAuditEvents(projectId: string, limit = 100): Promise<AuditEvent[]> {
+  const resp = await fetch(`${BASE}/projects/${projectId}/audit-events?limit=${limit}`);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return resp.json();
+}

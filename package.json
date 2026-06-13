@@ -10,7 +10,9 @@
     "db:push": "pnpm --filter @consensus/db db:push",
     "db:generate": "pnpm --filter @consensus/db db:generate",
     "pilot": "pnpm --filter @consensus/pilot pilot",
-    "pilot:auto": "pnpm --filter @consensus/pilot pilot:auto"
+    "pilot:auto": "pnpm --filter @consensus/pilot pilot:auto",
+    "suite": "pnpm --filter @consensus/pilot suite",
+    "suite:auto": "pnpm --filter @consensus/pilot suite:auto"
   },
   "engines": { "node": ">=20" },
   "pnpm": {

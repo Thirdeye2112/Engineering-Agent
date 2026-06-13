@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "pilot": "tsx src/run-pilot.ts",
-    "pilot:auto": "tsx src/run-pilot.ts --auto-approve"
+    "pilot:auto": "tsx src/run-pilot.ts --auto-approve",
+    "suite": "tsx src/run-suite.ts",
+    "suite:auto": "tsx src/run-suite.ts --auto-approve",
+    "test": "node --import tsx/esm --test src/__tests__/pilot.test.ts src/__tests__/phase8.test.ts"
   },
   "dependencies": {
     "@consensus/agent-manager": "workspace:*",

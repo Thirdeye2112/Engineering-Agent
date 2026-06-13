@@ -146,6 +146,24 @@ export const PatchPreviewSchema = z.object({
 });
 export type PatchPreview = z.infer<typeof PatchPreviewSchema>;
 
+// ── Phase 4: SafeTestRunner result types ─────────────────────────────────────
+
+export const TestRunStatusSchema = z.enum(['passed', 'failed', 'timeout', 'tests_not_configured', 'blocked']);
+export type TestRunStatus = z.infer<typeof TestRunStatusSchema>;
+
+export const TestRunResultSchema = z.object({
+  profile: z.enum(['unit', 'lint', 'typecheck', 'targeted']),
+  status: TestRunStatusSchema,
+  exitCode: z.number().nullable().optional(),
+  stdout: z.string().optional(),
+  stderr: z.string().optional(),
+  durationMs: z.number(),
+  truncated: z.boolean().optional(),
+  label: z.string().optional(),
+  error: z.string().optional(),
+});
+export type TestRunResult = z.infer<typeof TestRunResultSchema>;
+
 export const PRQualityChecklistSchema = z.object({
   taskSummary: z.string(),
   filesChanged: z.array(z.string()),
@@ -155,6 +173,8 @@ export const PRQualityChecklistSchema = z.object({
   humanApprovalsObtained: z.boolean(),
   auditChainValid: z.boolean(),
   codeReviewVerdict: CodeReviewVerdictSchema.optional(),
+  testResults: z.array(TestRunResultSchema).optional(),
+  requiredTestsPassed: z.boolean().optional(),
   blockers: z.array(z.string()),
   warnings: z.array(z.string()),
   readyToMerge: z.boolean(),
@@ -173,6 +193,7 @@ export const PRWorkflowReportSchema = z.object({
   securityReview: SecurityReviewSchema.optional(),
   codeReview: CodeReviewResultSchema.optional(),
   testPlan: TestPlanResultSchema.optional(),
+  testResults: z.array(TestRunResultSchema).optional(),
   patchPreviews: z.array(PatchPreviewSchema).optional(),
   checklist: PRQualityChecklistSchema.optional(),
   blockingObjections: z.array(z.string()),

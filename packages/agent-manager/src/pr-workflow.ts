@@ -1,11 +1,12 @@
 import { Agent } from './agent.js';
-import { DebateEngine, type AgentInputConfig, type DebateEvent } from './debate-engine.js';
+import { DebateEngine, type AgentInputConfig } from './debate-engine.js';
 import { CodeReviewAgent, type CodeReviewInput } from './code-review-agent.js';
 import { TestPlanAgent } from './test-plan-agent.js';
 import type { IAIProvider } from './provider-interface.js';
-import type { AgentRole, PRWorkflowReport, PRQualityChecklist, PatchPreview } from '@consensus/shared-types';
+import type { AgentRole, PRWorkflowReport, PRQualityChecklist, PatchPreview, TestRunResult } from '@consensus/shared-types';
 import type { ITool } from '@consensus/tools';
-import { FilesystemTool } from '@consensus/tools';
+import { FilesystemTool, SafeTestRunner } from '@consensus/tools';
+import type { TestProfileConfig } from '@consensus/tools';
 import { TerminalTool } from '@consensus/tools';
 import { auditLog } from '@consensus/audit-log';
 
@@ -15,6 +16,10 @@ export interface PRWorkflowConfig {
   agents: AgentInputConfig[];
   tools?: ITool[];
   sandboxRoot?: string;
+  /** Optional test profiles; if provided, required tests run after implementation */
+  testProfiles?: TestProfileConfig;
+  /** Set false to skip test execution entirely (default: true when testProfiles provided) */
+  runTests?: boolean;
   onEvent?: (event: PRWorkflowEvent) => void;
 }
 
@@ -30,6 +35,8 @@ export type PRWorkflowEvent =
   | { type: 'code_review_started' }
   | { type: 'code_review_complete'; verdict: string; riskLevel: string }
   | { type: 'test_plan_complete'; requiredCount: number }
+  | { type: 'tests_started'; profiles: string[] }
+  | { type: 'test_complete'; profile: string; status: string }
   | { type: 'workflow_complete'; report: PRWorkflowReport }
   | { type: 'workflow_error'; error: string };
 
@@ -144,7 +151,79 @@ export class PRWorkflow {
       }
     }
 
-    // ── Step 4: Security reviewer cross-reviews the diff ────────────────────
+    // ── Step 4: Test plan (must run before SafeTestRunner so we know required profiles) ──
+    const testPlanConfig = agents.find(a => a.role === 'architect') ?? agents[0];
+    const testPlanAgentInst = new TestPlanAgent(testPlanConfig.provider);
+    let testPlan = undefined;
+
+    try {
+      testPlan = await testPlanAgentInst.plan({
+        taskContext: task,
+        filesChanged: filesModified,
+        proposedChangeSummary: finalResponse.narrative,
+      });
+      onEvent?.({ type: 'test_plan_complete', requiredCount: testPlan.requiredBeforePr.length });
+    } catch (err) {
+      console.warn('[test-plan] failed:', err);
+    }
+
+    // ── Step 5: Safe test execution (required_before_pr tests) ───────────────
+    const testResults: TestRunResult[] = [];
+
+    if (this.config.testProfiles && this.config.runTests !== false) {
+      const runner = new SafeTestRunner({
+        profiles: this.config.testProfiles,
+        sandboxRoot,
+        timeoutMs: 120_000,
+      });
+
+      // Determine which profiles to run from TestPlanAgent output (required_before_pr)
+      const requiredTypes = testPlan
+        ? testPlan.requiredBeforePr.map(i => i.type)
+        : ['unit', 'lint', 'typecheck'];
+
+      // Map test item types to runner profiles
+      const profilesToRun = new Set<'unit' | 'lint' | 'typecheck' | 'targeted'>();
+      for (const t of requiredTypes) {
+        if (t === 'unit' || t === 'integration') profilesToRun.add('unit');
+        if (t === 'e2e') profilesToRun.add('targeted');
+      }
+      // Always run lint and typecheck if configured
+      if (this.config.testProfiles.lint) profilesToRun.add('lint');
+      if (this.config.testProfiles.typecheck) profilesToRun.add('typecheck');
+
+      if (profilesToRun.size > 0) {
+        onEvent?.({ type: 'tests_started', profiles: [...profilesToRun] });
+      }
+
+      const noopAudit = async () => {};
+      const testCtx = {
+        agentId: `${projectId}:test-runner`,
+        projectId,
+        permissionLevel: 'read' as const,
+        auditLog: noopAudit,
+      };
+
+      for (const profile of profilesToRun) {
+        const raw = await runner.execute({ profile, workingDirectory: '.' }, testCtx);
+        const out = raw.output as Record<string, unknown> | null;
+        const result: TestRunResult = {
+          profile,
+          status: (out?.status ?? (raw.success ? 'passed' : 'failed')) as TestRunResult['status'],
+          exitCode: (out?.exitCode as number | undefined) ?? null,
+          stdout: typeof out?.stdout === 'string' ? out.stdout : undefined,
+          stderr: typeof out?.stderr === 'string' ? out.stderr : undefined,
+          durationMs: raw.metadata.durationMs,
+          truncated: out?.truncated as boolean | undefined,
+          label: typeof out?.label === 'string' ? out.label : undefined,
+          error: raw.error,
+        };
+        testResults.push(result);
+        onEvent?.({ type: 'test_complete', profile, status: result.status });
+      }
+    }
+
+    // ── Step 5: Security reviewer cross-reviews the diff ────────────────────
     onEvent?.({ type: 'security_review_started' });
 
     const secReviewerConfig = agents.find(a => a.role === 'security_reviewer');
@@ -179,37 +258,42 @@ export class PRWorkflow {
       });
     }
 
-    // ── Step 5: Test plan ────────────────────────────────────────────────────
-    const testPlanConfig = agents.find(a => a.role === 'architect') ?? agents[0];
-    const testPlanAgent = new TestPlanAgent(testPlanConfig.provider);
-    let testPlan = undefined;
-
-    try {
-      testPlan = await testPlanAgent.plan({
-        taskContext: task,
-        filesChanged: filesModified,
-        proposedChangeSummary: finalResponse.narrative,
-      });
-      onEvent?.({ type: 'test_plan_complete', requiredCount: testPlan.requiredBeforePr.length });
-    } catch (err) {
-      console.warn('[test-plan] failed:', err);
-    }
-
-    // ── Step 6: Audit chain verification ────────────────────────────────────
+    // ── Step 7: Audit chain verification ────────────────────────────────────
     const auditVerification = await auditLog.verify().catch(() => ({ valid: false, checkedCount: 0 }));
 
-    // ── Step 7: Assemble blocking objections and checklist ───────────────────
+    // ── Step 8: Assemble blocking objections and checklist ───────────────────
     const codeReviewBlockers = codeReview?.verdict === 'block' ? [codeReview.rationale] : [];
+
+    // Determine required test status
+    const requiredTestResults = testResults.filter(r =>
+      r.status !== 'tests_not_configured' && r.status !== 'blocked',
+    );
+    const requiredTestsPassed = testResults.length === 0
+      ? undefined  // no tests configured — not a pass, not a fail
+      : requiredTestResults.length > 0
+        ? requiredTestResults.every(r => r.status === 'passed')
+        : undefined;
+
+    const testFailBlockers = testResults
+      .filter(r => r.status === 'failed' || r.status === 'timeout')
+      .map(r => `Required test '${r.profile}' ${r.status}`);
+
+    const notConfiguredWarnings = testResults
+      .filter(r => r.status === 'tests_not_configured')
+      .map(r => `tests_not_configured for profile '${r.profile}'`);
+
     const allBlockingObjections = [
       ...implementationBlockers,
       ...(securityReview?.blockingIssues ?? []),
       ...codeReviewBlockers,
+      ...testFailBlockers,
     ];
 
     const warnings: string[] = [
       ...(codeReview?.verdict === 'request_changes' ? codeReview.requiredFixes : []),
       ...(codeReview?.securityConcerns ?? []),
       ...(codeReview?.testingGaps ?? []),
+      ...notConfiguredWarnings,
     ];
 
     const checklist: PRQualityChecklist = {
@@ -217,14 +301,19 @@ export class PRWorkflow {
       filesChanged: filesModified,
       agentReasoning: finalResponse.narrative,
       securityReviewPassed: securityReview?.approved ?? false,
-      testPlanComplete: (testPlan?.requiredBeforePr.length ?? 0) === 0 || !!testPlan,
+      testPlanComplete: !!testPlan,
       humanApprovalsObtained: steps.some(s => s.toolResults.some(r => r.success)),
       auditChainValid: auditVerification.valid,
       codeReviewVerdict: codeReview?.verdict,
+      testResults: testResults.length > 0 ? testResults : undefined,
+      requiredTestsPassed,
       blockers: allBlockingObjections,
       warnings,
-      // Block merge if any blockers, code review blocked, or audit chain invalid
-      readyToMerge: allBlockingObjections.length === 0 && codeReview?.verdict !== 'block' && auditVerification.valid,
+      readyToMerge:
+        allBlockingObjections.length === 0 &&
+        codeReview?.verdict !== 'block' &&
+        auditVerification.valid &&
+        (requiredTestsPassed !== false),
     };
 
     const report: PRWorkflowReport = {
@@ -239,6 +328,7 @@ export class PRWorkflow {
       securityReview,
       codeReview,
       testPlan,
+      testResults: testResults.length > 0 ? testResults : undefined,
       patchPreviews: patchPreviews.length > 0 ? patchPreviews : undefined,
       checklist,
       blockingObjections: allBlockingObjections,

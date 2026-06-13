@@ -61,6 +61,69 @@ export const DeliberationReportSchema = z.object({
 });
 export type DeliberationReport = z.infer<typeof DeliberationReportSchema>;
 
+// ── Phase F: Implementation & PR types ──────────────────────────────────────
+
+export const ToolCallSchema = z.object({
+  tool: z.string(),
+  operation: z.string(),
+  // All other fields are tool-specific
+}).passthrough();
+export type ToolCall = z.infer<typeof ToolCallSchema>;
+
+export const ImplementationStepSchema = z.object({
+  iteration: z.number().int(),
+  narrative: z.string(),
+  toolCalls: z.array(ToolCallSchema),
+  toolResults: z.array(z.object({
+    tool: z.string(),
+    success: z.boolean(),
+    output: z.unknown(),
+    error: z.string().optional(),
+  })),
+});
+export type ImplementationStep = z.infer<typeof ImplementationStepSchema>;
+
+export const AgentResponseSchema = z.object({
+  status: z.enum(['in_progress', 'complete', 'blocked']),
+  narrative: z.string(),
+  toolCalls: z.array(ToolCallSchema).default([]),
+  prUrl: z.string().optional(),
+  prNumber: z.number().optional(),
+  filesModified: z.array(z.string()).optional(),
+  blockingIssues: z.array(z.string()).optional(),
+});
+export type AgentResponse = z.infer<typeof AgentResponseSchema>;
+
+export const SecurityReviewSchema = z.object({
+  approved: z.boolean(),
+  findings: z.array(z.object({
+    severity: z.enum(['info', 'low', 'medium', 'high', 'critical']),
+    description: z.string(),
+    file: z.string().optional(),
+  })),
+  blockingIssues: z.array(z.string()),
+  recommendation: z.string(),
+});
+export type SecurityReview = z.infer<typeof SecurityReviewSchema>;
+
+export const PRWorkflowReportSchema = z.object({
+  projectId: z.string(),
+  task: z.string(),
+  implementationPlan: z.string(),
+  steps: z.array(ImplementationStepSchema),
+  prUrl: z.string().optional(),
+  prNumber: z.number().optional(),
+  branch: z.string().optional(),
+  filesModified: z.array(z.string()),
+  securityReview: SecurityReviewSchema.optional(),
+  blockingObjections: z.array(z.string()),
+  totalCostUsd: z.number(),
+  completedAt: z.string().datetime(),
+});
+export type PRWorkflowReport = z.infer<typeof PRWorkflowReportSchema>;
+
+// ── Provider / model registries ─────────────────────────────────────────────
+
 export type ProviderName = 'openai' | 'anthropic' | 'google';
 export type TierName = 'fast' | 'standard' | 'premium';
 

@@ -41,7 +41,7 @@ export type CollaborationReport = z.infer<typeof CollaborationReportSchema>;
 
 export const CreateProjectRequestSchema = z.object({
   task: z.string().min(1),
-  mode: z.enum(['debate', 'collaborate']),
+  mode: z.enum(['debate', 'collaborate', 'pr_workflow']),
   agents: z.array(z.object({
     provider: z.enum(['openai', 'anthropic', 'google']),
     tier: z.enum(['fast', 'standard', 'premium']),

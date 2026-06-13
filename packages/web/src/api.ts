@@ -15,7 +15,7 @@ export interface Project {
 
 export interface CreateProjectPayload {
   task: string;
-  mode: 'debate' | 'collaborate';
+  mode: 'debate' | 'collaborate' | 'pr_workflow';
   agents: Array<{ provider: string; tier: string; role: string }>;
   maxRounds: number;
   budgetCap?: number;

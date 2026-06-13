@@ -1,8 +1,8 @@
 import type { IAIProvider } from './provider-interface.js';
 import { conversationStore } from './conversation-store.js';
-import { buildProposalPrompt, buildCritiquePrompt, buildRevisionPrompt, buildVotePrompt } from './prompts.js';
-import { AgentProposalSchema, AgentCritiqueSchema, VoteSchema } from '@consensus/shared-types';
-import type { AgentRole, AgentProposal, AgentCritique, Vote } from '@consensus/shared-types';
+import { buildProposalPrompt, buildCritiquePrompt, buildRevisionPrompt, buildVotePrompt, buildImplementationPrompt, buildToolResultMessage, buildSecurityReviewPrompt } from './prompts.js';
+import { AgentProposalSchema, AgentCritiqueSchema, VoteSchema, AgentResponseSchema, SecurityReviewSchema } from '@consensus/shared-types';
+import type { AgentRole, AgentProposal, AgentCritique, Vote, AgentResponse, ImplementationStep, SecurityReview } from '@consensus/shared-types';
 import { createProvider } from './provider-factory.js';
 import type { ITool, ToolContext, ToolResult } from '@consensus/tools';
 import { permissionEngine } from '@consensus/permissions';
@@ -120,6 +120,75 @@ export class Agent {
     const raw = await this.call(systemPrompt, userMessage);
     const parsed = parseJSON<unknown>(raw, 'vote');
     return VoteSchema.parse(parsed);
+  }
+
+  async implement(
+    implementationPlan: string,
+    tools: ITool[],
+    maxIterations = 10,
+  ): Promise<{ steps: ImplementationStep[]; finalResponse: AgentResponse }> {
+    const toolMap = new Map(tools.map(t => [t.name, t]));
+    const steps: ImplementationStep[] = [];
+
+    const { systemPrompt, userMessage } = buildImplementationPrompt(
+      this.config.role, this.config.task, implementationPlan, tools,
+    );
+
+    // First call — start implementation
+    let raw = await this.call(systemPrompt, userMessage);
+    let response = AgentResponseSchema.parse(parseJSON<unknown>(raw, 'implementation response'));
+
+    for (let iteration = 0; iteration < maxIterations; iteration++) {
+      if (response.status !== 'in_progress' || response.toolCalls.length === 0) break;
+
+      // Execute all tool calls in this iteration
+      const toolResults: ImplementationStep['toolResults'] = [];
+      for (const tc of response.toolCalls) {
+        const tool = toolMap.get(tc.tool);
+        if (!tool) {
+          toolResults.push({ tool: tc.tool, success: false, output: null, error: `Unknown tool: ${tc.tool}` });
+          continue;
+        }
+        const result = await this.useTool(tool, tc, tc.operation as string);
+        toolResults.push({ tool: tc.tool, success: result.success, output: result.output, error: result.error });
+      }
+
+      steps.push({ iteration, narrative: response.narrative, toolCalls: response.toolCalls, toolResults });
+
+      // Feed results back to agent
+      const resultMsg = buildToolResultMessage(
+        response.toolCalls.map((tc, i) => ({
+          tool: tc.tool,
+          operation: tc.operation as string,
+          success: toolResults[i].success,
+          output: toolResults[i].output,
+          error: toolResults[i].error,
+        })),
+      );
+      raw = await this.call(systemPrompt, resultMsg);
+      response = AgentResponseSchema.parse(parseJSON<unknown>(raw, 'implementation response'));
+    }
+
+    // Capture final step if it has tool calls (e.g. open_pr on last iteration)
+    if (response.toolCalls.length > 0) {
+      const toolResults: ImplementationStep['toolResults'] = [];
+      for (const tc of response.toolCalls) {
+        const tool = toolMap.get(tc.tool);
+        if (!tool) { toolResults.push({ tool: tc.tool, success: false, output: null, error: `Unknown tool: ${tc.tool}` }); continue; }
+        const result = await this.useTool(tool, tc, tc.operation as string);
+        toolResults.push({ tool: tc.tool, success: result.success, output: result.output, error: result.error });
+      }
+      steps.push({ iteration: steps.length, narrative: response.narrative, toolCalls: response.toolCalls, toolResults });
+    }
+
+    return { steps, finalResponse: response };
+  }
+
+  async securityReview(prContent: string): Promise<SecurityReview> {
+    const { systemPrompt, userMessage } = buildSecurityReviewPrompt(prContent, this.config.task);
+    const raw = await this.call(systemPrompt, userMessage);
+    const parsed = parseJSON<unknown>(raw, 'security review');
+    return SecurityReviewSchema.parse(parsed);
   }
 
   async escalate(_reason: string): Promise<IAIProvider> {

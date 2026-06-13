@@ -18,21 +18,91 @@ function buildToolsSection(tools: ITool[]): string {
   return `\n## Available tools\n${list}\n\nTo use a tool, include in your JSON response:\n"toolCalls": [{ "tool": "filesystem", "operation": "read_file", "path": "src/index.ts" }]\n`;
 }
 
+const AGENT_RESPONSE_SCHEMA = `{
+  "status": "in_progress" | "complete" | "blocked",
+  "narrative": "string — what you did or are doing",
+  "toolCalls": [
+    { "tool": "filesystem", "operation": "read_file", "path": "src/index.ts" }
+  ],
+  "prUrl": "string (optional — when PR is opened)",
+  "prNumber": 42,
+  "filesModified": ["path/to/file.ts"],
+  "blockingIssues": ["issue1 (when status=blocked)"]
+}`;
+
 export function buildImplementationPrompt(
   role: AgentRole,
   task: string,
   implementationPlan: string,
   tools: ITool[],
 ): { systemPrompt: string; userMessage: string } {
+  const toolList = tools.map(t => `- **${t.name}**: ${t.description}`).join('\n');
   return {
     systemPrompt: `${ROLE_DESCRIPTIONS[role]}
 
-You are implementing an agreed plan using available tools. Work iteratively: read files to understand, write files to implement, verify with tsc/eslint.${buildToolsSection(tools)}
+You are implementing a plan using real tools. Work iteratively:
+1. Read relevant files to understand the current code
+2. Write or modify files to implement the change
+3. Verify with tsc/eslint before committing
+4. Create a branch, commit the files, open a PR
 
-Respond with ONLY valid JSON matching this schema:
-${JSON_PROPOSAL_SCHEMA}
-Include a "toolCalls" array if you need to use tools.`,
-    userMessage: `Task: ${task}\n\nAgreed implementation plan:\n${implementationPlan}\n\nImplement this plan step by step. Report what you did and the outcome.`,
+Available tools:
+${toolList}
+
+Respond with ONLY valid JSON — no prose, no fences:
+${AGENT_RESPONSE_SCHEMA}
+
+Rules:
+- Set status="in_progress" with toolCalls when you need to use tools
+- Set status="complete" when the PR is opened (include prUrl, prNumber, filesModified)
+- Set status="blocked" if you hit an unresolvable issue (include blockingIssues)
+- One round of toolCalls per response — wait for results before the next round
+- ONLY call tools from the Available tools list above`,
+    userMessage: `Task: ${task}
+
+Agreed implementation plan:
+${implementationPlan}
+
+Start by reading the relevant files. Then implement the plan step by step.`,
+  };
+}
+
+export function buildToolResultMessage(
+  toolResults: Array<{ tool: string; operation: string; success: boolean; output: unknown; error?: string }>,
+): string {
+  const lines = toolResults.map(r =>
+    `[${r.tool}.${r.operation}] ${r.success ? '✓' : '✗'} ${r.error ?? JSON.stringify(r.output).slice(0, 500)}`
+  );
+  return `Tool results:\n${lines.join('\n')}\n\nContinue implementing. Respond with the next JSON step.`;
+}
+
+export function buildSecurityReviewPrompt(
+  prContent: string,
+  task: string,
+): { systemPrompt: string; userMessage: string } {
+  return {
+    systemPrompt: `${ROLE_DESCRIPTIONS['security_reviewer']}
+
+Review a pull request for security issues. Respond with ONLY valid JSON:
+{
+  "approved": true | false,
+  "findings": [
+    { "severity": "info"|"low"|"medium"|"high"|"critical", "description": "string", "file": "string (optional)" }
+  ],
+  "blockingIssues": ["string — issues that MUST be fixed before merge"],
+  "recommendation": "string — overall verdict"
+}
+
+Rules:
+- Respond with ONLY the JSON object — no prose, no fences
+- approved=false if any finding is high or critical severity
+- blockingIssues only for high/critical findings`,
+    userMessage: `Task context: ${task}
+
+Pull request diff / content:
+${prContent}
+
+Review this for security issues.`,
   };
 }
 

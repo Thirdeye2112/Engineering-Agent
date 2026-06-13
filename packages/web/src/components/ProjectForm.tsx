@@ -12,7 +12,7 @@ interface AgentRow { provider: string; tier: string; role: string; }
 export default function ProjectForm({ onCreated }: { onCreated?: () => void } = {}) {
   const navigate = useNavigate();
   const [task, setTask] = useState('');
-  const [mode, setMode] = useState<'debate' | 'collaborate'>('debate');
+  const [mode, setMode] = useState<'debate' | 'collaborate' | 'pr_workflow'>('debate');
   const [maxRounds, setMaxRounds] = useState(3);
   const [budgetCap, setBudgetCap] = useState('1.00');
   const [agents, setAgents] = useState<AgentRow[]>([
@@ -79,9 +79,10 @@ export default function ProjectForm({ onCreated }: { onCreated?: () => void } = 
       <div className="grid-2">
         <div className="field">
           <label>Mode</label>
-          <select value={mode} onChange={e => setMode(e.target.value as 'debate' | 'collaborate')}>
+          <select value={mode} onChange={e => setMode(e.target.value as 'debate' | 'collaborate' | 'pr_workflow')}>
             <option value="debate">Debate — all agents analyse, critique, vote</option>
             <option value="collaborate">Collaborate — subtasks assigned by role</option>
+            <option value="pr_workflow">PR Workflow — debate → implement → open PR → security review</option>
           </select>
         </div>
         <div className="grid-2">

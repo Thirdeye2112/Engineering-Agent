@@ -3,7 +3,7 @@ import type { IAIProvider } from './provider-interface.js';
 import type { AgentRole, AgentProposal, AgentCritique, Vote, DeliberationReport, RiskFlag } from '@consensus/shared-types';
 import { SynthesisEngine } from './synthesis-engine.js';
 
-export interface AgentConfig {
+export interface AgentInputConfig {
   provider: IAIProvider;
   role: AgentRole;
 }
@@ -18,7 +18,7 @@ export interface RoundResult {
 export interface DebateConfig {
   deliberationId: string;
   task: string;
-  agents: AgentConfig[];
+  agents: AgentInputConfig[];
   maxRounds: number;
   budgetCap?: number;
   onEvent?: (event: DebateEvent) => void;

@@ -9,3 +9,4 @@ export * from './task-decomposer.js';
 export * from './subtask-executor.js';
 export * from './collaboration-orchestrator.js';
 export * from './integration-engine.js';
+export * from './pr-workflow.js';

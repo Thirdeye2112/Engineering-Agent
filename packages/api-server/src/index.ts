@@ -10,6 +10,7 @@ import { DebateEngine } from '@consensus/agent-manager';
 import { TaskDecomposer } from '@consensus/agent-manager';
 import { CollaborationOrchestrator } from '@consensus/agent-manager';
 import { IntegrationEngine } from '@consensus/agent-manager';
+import { PRWorkflow } from '@consensus/agent-manager';
 import { CreateProjectRequestSchema } from '@consensus/shared-types';
 import { eq } from 'drizzle-orm';
 
@@ -86,7 +87,7 @@ app.post('/projects', async (req, res) => {
           .set({ status: 'complete', report: report as any, completedAt: new Date() })
           .where(eq(projects.id, projectId));
 
-      } else {
+      } else if (projectReq.mode === 'collaborate') {
         // Collaboration mode
         const primaryAgent = projectReq.agents[0];
         const provider = createProvider(primaryAgent.provider, primaryAgent.tier);
@@ -125,6 +126,26 @@ app.post('/projects', async (req, res) => {
           .where(eq(projects.id, projectId));
 
         broadcast(projectId, { type: 'deliberation_complete', report });
+
+      } else if (projectReq.mode === 'pr_workflow') {
+        const agentConfigs = projectReq.agents.map(a => ({
+          provider: createProvider(a.provider, a.tier),
+          role: a.role,
+        }));
+
+        const workflow = new PRWorkflow({
+          projectId,
+          task: projectReq.task,
+          agents: agentConfigs,
+          sandboxRoot: process.env.FILESYSTEM_SANDBOX_ROOT,
+          onEvent: (event) => broadcast(projectId, event),
+        });
+
+        const report = await workflow.run();
+
+        await db.update(projects)
+          .set({ status: 'complete', report: report as any, completedAt: new Date() })
+          .where(eq(projects.id, projectId));
       }
     } catch (err) {
       console.error('[Project error]', err);

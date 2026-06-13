@@ -12,8 +12,10 @@ import { TaskDecomposer } from '@consensus/agent-manager';
 import { CollaborationOrchestrator } from '@consensus/agent-manager';
 import { IntegrationEngine } from '@consensus/agent-manager';
 import { PRWorkflow } from '@consensus/agent-manager';
+import { onboardingWorkflow } from '@consensus/agent-manager';
 import { CreateProjectRequestSchema } from '@consensus/shared-types';
-import { eq } from 'drizzle-orm';
+import { auditEvents } from '@consensus/db';
+import { and, inArray, sql, desc } from 'drizzle-orm';
 import { auditLog } from '@consensus/audit-log';
 
 const app = express();
@@ -302,6 +304,76 @@ app.post('/permission-requests/:requestId/deny', async (req, res) => {
   const request = await permissionEngine.getRequest(requestId);
   if (request) broadcast(request.projectId, { type: 'permission_denied', requestId });
   res.json({ ok: true });
+});
+
+// Approval telemetry / reputation metrics
+app.get('/metrics/approvals', async (req, res) => {
+  const db = getDb();
+  const projectId = req.query.projectId as string | undefined;
+
+  const conditions = [
+    inArray(auditEvents.approvalStatus, ['approved', 'denied', 'not_required']),
+  ];
+  if (projectId) conditions.push(eq(auditEvents.projectId, projectId));
+
+  const rows = await db
+    .select({
+      agentRole: auditEvents.actorId,
+      toolName: auditEvents.toolName,
+      approvalStatus: auditEvents.approvalStatus,
+      count: sql<number>`cast(count(*) as int)`,
+    })
+    .from(auditEvents)
+    .where(and(...conditions))
+    .groupBy(auditEvents.actorId, auditEvents.toolName, auditEvents.approvalStatus)
+    .orderBy(desc(sql`count(*)`));
+
+  // Aggregate into per-agent-role rows
+  const byAgent = new Map<string, { approved: number; denied: number; autoAllowed: number }>();
+  for (const row of rows) {
+    const key = row.agentRole ?? 'system';
+    const entry = byAgent.get(key) ?? { approved: 0, denied: 0, autoAllowed: 0 };
+    if (row.approvalStatus === 'approved') entry.approved += row.count;
+    else if (row.approvalStatus === 'denied') entry.denied += row.count;
+    else if (row.approvalStatus === 'not_required') entry.autoAllowed += row.count;
+    byAgent.set(key, entry);
+  }
+
+  const metricRows = Array.from(byAgent.entries()).map(([agentRole, c]) => {
+    const total = c.approved + c.denied + c.autoAllowed;
+    const humanDecisions = c.approved + c.denied;
+    const approvalRate = humanDecisions > 0 ? c.approved / humanDecisions : 1;
+    return { agentRole, approved: c.approved, denied: c.denied, autoAllowed: c.autoAllowed, total, approvalRate };
+  });
+
+  const totalDecisions = metricRows.reduce((s, r) => s + r.approved + r.denied, 0);
+  const totalApproved = metricRows.reduce((s, r) => s + r.approved, 0);
+  const globalApprovalRate = totalDecisions > 0 ? totalApproved / totalDecisions : 1;
+  const HIGH_TRUST = 0.9;
+  const highTrustAgents = metricRows
+    .filter(r => r.approvalRate >= HIGH_TRUST && r.approved + r.denied >= 10)
+    .map(r => r.agentRole ?? 'unknown');
+
+  res.json({ rows: metricRows, globalApprovalRate, totalDecisions, highTrustAgents });
+});
+
+// Repository onboarding
+app.post('/projects/:id/onboard', async (req, res) => {
+  const sandboxRoot = req.body.sandboxRoot ?? process.env.FILESYSTEM_SANDBOX_ROOT;
+  if (!sandboxRoot) {
+    res.status(400).json({ error: 'sandboxRoot required (or set FILESYSTEM_SANDBOX_ROOT)' });
+    return;
+  }
+  try {
+    const report = await onboardingWorkflow.run({
+      projectId: req.params.id,
+      repoFullName: req.body.repoFullName,
+      sandboxRoot,
+    });
+    res.json(report);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
 });
 
 // Allow frontend to update runtime API keys (local dev only)

@@ -214,6 +214,44 @@ export const PRWorkflowReportSchema = z.object({
 });
 export type PRWorkflowReport = z.infer<typeof PRWorkflowReportSchema>;
 
+// ── Phase 6: Onboarding + metrics types ─────────────────────────────────────
+
+export const OnboardingReportSchema = z.object({
+  projectId: z.string(),
+  repoFullName: z.string().optional(),
+  packageManager: z.string(),
+  isMonorepo: z.boolean(),
+  frameworks: z.array(z.string()),
+  testCommand: z.string().optional(),
+  lintCommand: z.string().optional(),
+  typecheckCommand: z.string().optional(),
+  hasTypeScript: z.boolean(),
+  hasCiConfig: z.boolean(),
+  memoriesWritten: z.number().int(),
+  permissionRulesCreated: z.number().int(),
+  completedAt: z.string().datetime(),
+});
+export type OnboardingReport = z.infer<typeof OnboardingReportSchema>;
+
+export const ApprovalMetricRowSchema = z.object({
+  agentRole: z.string().optional(),
+  toolName: z.string().optional(),
+  approved: z.number().int(),
+  denied: z.number().int(),
+  autoAllowed: z.number().int(),
+  total: z.number().int(),
+  approvalRate: z.number(),
+});
+export type ApprovalMetricRow = z.infer<typeof ApprovalMetricRowSchema>;
+
+export const ApprovalMetricsSchema = z.object({
+  rows: z.array(ApprovalMetricRowSchema),
+  globalApprovalRate: z.number(),
+  totalDecisions: z.number().int(),
+  highTrustAgents: z.array(z.string()),
+});
+export type ApprovalMetrics = z.infer<typeof ApprovalMetricsSchema>;
+
 // ── Provider / model registries ─────────────────────────────────────────────
 
 export type ProviderName = 'openai' | 'anthropic' | 'google';

@@ -106,13 +106,14 @@ export class PRWorkflow {
 
     // ── Step 2: Architect implements using tools ─────────────────────────────
     const architectConfig = agents.find(a => a.role === 'architect') ?? agents[0];
+    const implementorRole = architectConfig.role;
 
     const tools: ITool[] = this.config.tools ?? [
-      new FilesystemTool(sandboxRoot),
+      // Sandbox writes are auto-allowed for the implementation agent — the sandbox
+      // boundary limits blast radius; human approval still covers the commit step.
+      new FilesystemTool(sandboxRoot, { trustedRoles: [implementorRole] }),
       new TerminalTool(),
     ];
-
-    const implementorRole = architectConfig.role;
     onEvent?.({ type: 'implementation_started', role: implementorRole });
 
     const implementor = new Agent({

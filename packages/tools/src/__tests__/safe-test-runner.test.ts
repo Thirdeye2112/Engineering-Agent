@@ -65,9 +65,9 @@ describe('SafeTestRunner – command allowlist', () => {
     assert.equal(out?.status, 'tests_not_configured');
   });
 
-  it('gates property is approval_required for run', () => {
+  it('gates property is auto_allow for run (allowlist+injection detection provides safety)', () => {
     const runner = new SafeTestRunner({ sandboxRoot: sandbox });
-    assert.equal(runner.gates['run'], 'approval_required');
+    assert.equal(runner.gates['run'], 'auto_allow');
   });
 });
 

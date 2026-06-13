@@ -142,3 +142,56 @@ export async function fetchAuditEvents(projectId: string, limit = 100): Promise<
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   return resp.json();
 }
+
+export interface ApprovalMetricRow {
+  agentRole?: string;
+  toolName?: string;
+  approved: number;
+  denied: number;
+  autoAllowed: number;
+  total: number;
+  approvalRate: number;
+}
+
+export interface ApprovalMetrics {
+  rows: ApprovalMetricRow[];
+  globalApprovalRate: number;
+  totalDecisions: number;
+  highTrustAgents: string[];
+}
+
+export async function fetchApprovalMetrics(projectId?: string): Promise<ApprovalMetrics> {
+  const url = projectId ? `${BASE}/metrics/approvals?projectId=${projectId}` : `${BASE}/metrics/approvals`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return resp.json();
+}
+
+export interface OnboardingReport {
+  projectId: string;
+  repoFullName?: string;
+  packageManager: string;
+  isMonorepo: boolean;
+  frameworks: string[];
+  testCommand?: string;
+  lintCommand?: string;
+  typecheckCommand?: string;
+  hasTypeScript: boolean;
+  hasCiConfig: boolean;
+  memoriesWritten: number;
+  permissionRulesCreated: number;
+  completedAt: string;
+}
+
+export async function onboardProject(projectId: string, sandboxRoot: string, repoFullName?: string): Promise<OnboardingReport> {
+  const resp = await fetch(`${BASE}/projects/${projectId}/onboard`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ sandboxRoot, repoFullName }),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(JSON.stringify(err));
+  }
+  return resp.json();
+}

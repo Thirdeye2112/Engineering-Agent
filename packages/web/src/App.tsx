@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import ProjectView from './pages/ProjectView';
 import ApprovalQueue from './pages/ApprovalQueue';
 import AuditViewer from './pages/AuditViewer';
+import ApprovalMetrics from './pages/ApprovalMetrics';
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
           <Route path="/credentials" element={<Credentials />} />
           <Route path="/approvals" element={<ApprovalQueue />} />
           <Route path="/audit" element={<AuditViewer />} />
+          <Route path="/metrics" element={<ApprovalMetrics />} />
         </Routes>
       </main>
     </div>

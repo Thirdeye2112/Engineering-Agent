@@ -7,6 +7,7 @@ export type GitHubOperation =
   | 'read_file'
   | 'create_branch'
   | 'commit_file'
+  | 'batch_commit'
   | 'open_pr';
 
 export interface GitHubInput {
@@ -22,10 +23,12 @@ export interface GitHubInput {
   body?: string;
   base?: string;
   head?: string;
+  /** batch_commit: list of files to commit atomically */
+  files?: Array<{ path: string; content: string }>;
 }
 
 const PROTECTED_BRANCHES = new Set(['main', 'master', 'production', 'prod', 'release']);
-const VALID_OPS: GitHubOperation[] = ['get_repo','list_files','read_file','create_branch','commit_file','open_pr'];
+const VALID_OPS: GitHubOperation[] = ['get_repo','list_files','read_file','create_branch','commit_file','batch_commit','open_pr'];
 
 /** Sanitize a branch name to a safe slug. Removes leading/trailing slashes and
  *  collapses any sequence of chars that aren't alphanumeric, hyphen, or underscore
@@ -48,6 +51,7 @@ export class GitHubTool implements ITool {
     read_file:     'auto_allow',
     create_branch: 'approval_required',
     commit_file:   'approval_required',
+    batch_commit:  'approval_required',  // one approval for all files in the batch
     open_pr:       'approval_required',
   };
 
@@ -159,6 +163,46 @@ export class GitHubTool implements ITool {
               ...(existingSha ? { sha: existingSha } : {}),
             });
           output = { committed: true, path: inp.path, branch: inp.branch, commitSha: result.commit.sha };
+          break;
+        }
+        case 'batch_commit': {
+          if (!inp.branch || !inp.message || !inp.files?.length)
+            return { success: false, output: null, error: 'branch, message, and files[] are required', metadata: { durationMs: 0 } };
+          if (PROTECTED_BRANCHES.has(inp.branch.toLowerCase()))
+            return { success: false, output: null, error: `Commit to protected branch '${inp.branch}' is always denied.`, metadata: { durationMs: 0 } };
+          if (redact(inp.message) !== inp.message)
+            return { success: false, output: null, error: 'Commit blocked: message contains detected secret patterns.', metadata: { durationMs: 0 } };
+          for (const f of inp.files) {
+            if (redact(f.content) !== f.content)
+              return { success: false, output: null, error: `Commit blocked: ${f.path} contains detected secret patterns.`, metadata: { durationMs: 0 } };
+          }
+          // Git Trees API: atomic multi-file commit
+          const headRef = await this.api<{ object: { sha: string } }>('GET',
+            `/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(inp.branch)}`);
+          const headSha = headRef.object.sha;
+          const headCommit = await this.api<{ tree: { sha: string } }>('GET',
+            `/repos/${owner}/${repo}/git/commits/${headSha}`);
+          const basTreeSha = headCommit.tree.sha;
+          const treeItems = await Promise.all(inp.files.map(async f => {
+            const blob = await this.api<{ sha: string }>('POST', `/repos/${owner}/${repo}/git/blobs`, {
+              content: Buffer.from(f.content, 'utf-8').toString('base64'),
+              encoding: 'base64',
+            });
+            return { path: f.path, mode: '100644', type: 'blob', sha: blob.sha };
+          }));
+          const newTree = await this.api<{ sha: string }>('POST', `/repos/${owner}/${repo}/git/trees`, {
+            base_tree: basTreeSha,
+            tree: treeItems,
+          });
+          const newCommit = await this.api<{ sha: string }>('POST', `/repos/${owner}/${repo}/git/commits`, {
+            message: inp.message,
+            tree: newTree.sha,
+            parents: [headSha],
+          });
+          await this.api<unknown>('PATCH', `/repos/${owner}/${repo}/git/refs/heads/${encodeURIComponent(inp.branch)}`, {
+            sha: newCommit.sha,
+          });
+          output = { committed: true, branch: inp.branch, commitSha: newCommit.sha, filesCount: inp.files.length };
           break;
         }
         case 'open_pr': {

@@ -26,6 +26,9 @@ export default function Sidebar() {
         <NavLink to="/audit" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
           <span>🔍</span> Audit
         </NavLink>
+        <NavLink to="/metrics" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+          <span>📊</span> Metrics
+        </NavLink>
         <NavLink to="/credentials" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
           <span>🔑</span> Credentials
         </NavLink>

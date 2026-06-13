@@ -212,8 +212,9 @@ export class Agent {
     // 1. Emit tool.requested
     await emit('tool.requested', { inputSummary: summarise(input) });
 
-    // 2. Resolve gate policy for this operation
-    const gate = tool.gates?.[operation] ?? 'approval_required';
+    // 2. Resolve gate policy for this operation — prefer context-aware override
+    const gateCtx = { agentId: this.threadId, projectId };
+    const gate = tool.getGate?.(operation, gateCtx) ?? tool.gates?.[operation] ?? 'approval_required';
 
     if (gate === 'always_deny') {
       await emit('permission.evaluated', { outputSummary: 'always_deny', approvalStatus: 'denied' });

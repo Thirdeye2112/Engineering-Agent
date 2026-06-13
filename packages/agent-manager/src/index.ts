@@ -12,3 +12,4 @@ export * from './integration-engine.js';
 export * from './pr-workflow.js';
 export * from './code-review-agent.js';
 export * from './test-plan-agent.js';
+export * from './onboarding-workflow.js';

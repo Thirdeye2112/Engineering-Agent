@@ -42,4 +42,11 @@ export interface ITool {
 
   execute(input: unknown, context: ToolContext): Promise<ToolResult>;
   validate(input: unknown): ValidationResult;
+
+  /**
+   * Optional context-aware gate override. When present, takes precedence over
+   * the static `gates` map. Use this to implement role-scoped auto-allowances
+   * (e.g. sandbox writes are safe for the implementation_agent role).
+   */
+  getGate?(operation: string, context: Pick<ToolContext, 'agentId' | 'projectId'>): GateType;
 }

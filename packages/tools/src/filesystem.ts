@@ -10,6 +10,8 @@ export interface FilesystemInput {
   content?: string;
 }
 
+const SANDBOX_WRITE_OPS = new Set(['write_file', 'create_dir', 'delete_file']);
+
 export class FilesystemTool implements ITool {
   readonly name = 'filesystem';
   readonly description = 'Read and write files within the project sandbox. Operations: read_file, write_file, list_dir, create_dir, delete_file.';
@@ -22,8 +24,25 @@ export class FilesystemTool implements ITool {
     delete_file: 'approval_required',
   };
 
-  constructor(private sandboxRoot: string) {
+  private trustedRoles: Set<string>;
+
+  constructor(sandboxRoot: string, options?: { trustedRoles?: string[] }) {
     this.sandboxRoot = resolve(sandboxRoot);
+    this.trustedRoles = new Set(options?.trustedRoles ?? []);
+  }
+
+  /**
+   * Sandbox writes are auto-allowed for trusted roles (e.g. implementation_agent).
+   * The sandbox boundary itself limits blast radius; human approval still covers the
+   * downstream commit step.
+   */
+  getGate(operation: string, context: Pick<ToolContext, 'agentId'>): GateType {
+    if (SANDBOX_WRITE_OPS.has(operation)) {
+      // agentId is "<deliberationId>:<role>" — extract the role suffix
+      const role = context.agentId.split(':').pop() ?? '';
+      if (this.trustedRoles.has(role)) return 'auto_allow';
+    }
+    return this.gates[operation] ?? 'approval_required';
   }
 
   private safePath(inputPath: string): string {

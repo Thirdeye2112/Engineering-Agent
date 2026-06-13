@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, readdirSync, mkdirSync, unlinkSync, statSync, realpathSync } from 'fs';
 import { resolve, normalize, relative } from 'path';
-import type { ITool, ToolContext, ToolResult, ValidationResult, ToolPermission } from './interface.js';
+import type { ITool, ToolContext, ToolResult, ValidationResult, ToolPermission, GateType } from './interface.js';
 
 type Operation = 'read_file' | 'write_file' | 'list_dir' | 'create_dir' | 'delete_file';
 
@@ -14,6 +14,13 @@ export class FilesystemTool implements ITool {
   readonly name = 'filesystem';
   readonly description = 'Read and write files within the project sandbox. Operations: read_file, write_file, list_dir, create_dir, delete_file.';
   readonly permissions: ToolPermission[] = ['read', 'write'];
+  readonly gates: Record<string, GateType> = {
+    read_file:   'auto_allow',
+    list_dir:    'auto_allow',
+    write_file:  'approval_required',
+    create_dir:  'approval_required',
+    delete_file: 'approval_required',
+  };
 
   constructor(private sandboxRoot: string) {
     this.sandboxRoot = resolve(sandboxRoot);

@@ -202,41 +202,68 @@ export class Agent {
   // Permission check happens before execution — never after.
   async useTool(tool: ITool, input: unknown, operation = 'execute'): Promise<ToolResult> {
     const permLevel = this.config.permissionLevel ?? 'read';
+    const projectId = this.config.deliberationId;
+    const emit = (actionType: string, extra: Record<string, unknown> = {}) =>
+      globalAuditLog.append({
+        projectId, actorType: 'agent', actorId: this.config.role,
+        actionType, toolName: tool.name, ...extra,
+      }).catch(err => console.warn('[audit]', actionType, err));
 
-    // Check permission engine first — before any execution
-    const perm = await permissionEngine.check(
-      this.config.role,
-      tool.name,
-      operation,
-      { projectId: this.config.deliberationId, input },
-    );
+    // 1. Emit tool.requested
+    await emit('tool.requested', { inputSummary: summarise(input) });
 
-    if (!perm.allowed) {
-      // Hard block: tool requires write but agent only has read permission level
-      const requiredWrite = tool.permissions.includes('write') && !tool.permissions.includes('read');
-      if (requiredWrite && permLevel === 'read') {
-        return {
-          success: false,
-          output: null,
-          error: `Permission denied: ${perm.reason}`,
-          metadata: { durationMs: 0 },
-        };
+    // 2. Resolve gate policy for this operation
+    const gate = tool.gates?.[operation] ?? 'approval_required';
+
+    if (gate === 'always_deny') {
+      await emit('permission.evaluated', { outputSummary: 'always_deny', approvalStatus: 'denied' });
+      const denied: ToolResult = { success: false, output: null, error: `Operation ${tool.name}.${operation} is always denied.`, metadata: { durationMs: 0 } };
+      await emit('tool.denied', { outputSummary: denied.error });
+      return denied;
+    }
+
+    // 3. For approval_required: check if already approved; if not, create request
+    if (gate === 'approval_required') {
+      const alreadyApproved = await permissionEngine.checkApproved(projectId, tool.name, operation);
+      if (!alreadyApproved) {
+        // Check DB rules for a standing grant
+        const perm = await permissionEngine.check(this.config.role, tool.name, operation, { projectId, input });
+        await emit('permission.evaluated', { outputSummary: perm.reason, approvalStatus: perm.allowed ? 'approved' : 'pending' });
+        if (!perm.allowed) {
+          // No standing rule — request human approval
+          const { requestId } = await permissionEngine.requestApproval(
+            this.config.role, tool.name, operation,
+            `Agent ${this.config.role} wants to use ${tool.name}.${operation}`,
+            projectId,
+          );
+          await emit('tool.denied', { outputSummary: `Pending approval: ${requestId}` });
+          return {
+            success: false, output: null,
+            error: `Approval required for ${tool.name}.${operation}. Request ID: ${requestId}`,
+            pendingApproval: true,
+            requestId,
+            metadata: { durationMs: 0 },
+          };
+        }
+      } else {
+        await emit('permission.evaluated', { outputSummary: 'approved by prior human decision', approvalStatus: 'approved' });
       }
-      // No DB rule found — default allow (open project). A future PermissionRule
-      // with defaultDeny:true on the project will override this.
+    } else {
+      // auto_allow
+      await emit('permission.evaluated', { outputSummary: 'auto_allow', approvalStatus: 'not_required' });
     }
 
     const legacyAuditLog = this.config.auditLog ?? (async () => {});
     const context: ToolContext = {
       agentId: this.threadId,
-      projectId: this.config.deliberationId,
+      projectId,
       permissionLevel: permLevel,
       auditLog: legacyAuditLog,
     };
 
     const result = await tool.execute(input, context);
 
-    // Append tool use + result to conversation thread — redact secrets in stored content
+    // 4. Append tool use + result to conversation thread — redact secrets
     const safeInput = redact(JSON.stringify(input));
     const safeOutput = redact(JSON.stringify(result.output));
     await conversationStore.appendExchange(
@@ -245,17 +272,15 @@ export class Agent {
       { role: 'assistant', content: `[tool_result] success=${result.success} output=${safeOutput}${result.error ? ` error=${result.error}` : ''}` },
     );
 
-    // Write to immutable audit log with redacted summaries
-    await globalAuditLog.append({
-      projectId: this.config.deliberationId,
-      actorType: 'agent',
-      actorId: this.config.role,
-      actionType: 'tool_use',
-      toolName: tool.name,
-      inputSummary: summarise(input),
-      outputSummary: summarise(result.output),
-      approvalStatus: perm.allowed ? 'not_required' : 'denied',
-    }).catch(err => console.warn('[audit] Failed to write audit event:', err));
+    // 5. Emit tool.executed or tool.failed
+    if (result.success) {
+      await emit('tool.executed', {
+        outputSummary: summarise(result.output),
+        approvalStatus: gate === 'auto_allow' ? 'not_required' : 'approved',
+      });
+    } else {
+      await emit('tool.failed', { outputSummary: result.error ?? 'unknown error' });
+    }
 
     return result;
   }

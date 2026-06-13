@@ -121,6 +121,26 @@ export class PermissionEngine {
     return rows[0] ?? null;
   }
 
+  /** Returns true if there is at least one approved permission request
+   *  for the given (projectId, tool, operation) combination.
+   *  Used by agent.useTool() to allow retries after human approval. */
+  async checkApproved(projectId: string, tool: string, operation: string): Promise<boolean> {
+    const db = getDb();
+    const rows = await db
+      .select()
+      .from(permissionRequests)
+      .where(
+        and(
+          eq(permissionRequests.projectId, projectId),
+          eq(permissionRequests.tool, tool),
+          eq(permissionRequests.operation, operation),
+          eq(permissionRequests.status, 'approved'),
+        )
+      )
+      .limit(1);
+    return rows.length > 0;
+  }
+
   async grantRule(projectId: string, rule: PermissionRule): Promise<void> {
     const db = getDb();
     await db.insert(permissionRules).values({

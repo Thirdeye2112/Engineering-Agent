@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import type { ITool, ToolContext, ToolResult, ValidationResult, ToolPermission } from './interface.js';
+import type { ITool, ToolContext, ToolResult, ValidationResult, ToolPermission, GateType } from './interface.js';
 
 export interface TerminalInput {
   command: string;
@@ -13,6 +13,9 @@ export class TerminalTool implements ITool {
   readonly name = 'terminal';
   readonly description = `Run permitted commands. Allowed: ${DEFAULT_ALLOWLIST.join(', ')}. Uses spawn (no shell injection).`;
   readonly permissions: ToolPermission[] = ['write'];
+  readonly gates: Record<string, GateType> = {
+    execute: 'approval_required',
+  };
 
   private allowlist: string[];
   private timeoutMs: number;

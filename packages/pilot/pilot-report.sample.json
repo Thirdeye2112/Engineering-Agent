@@ -1,0 +1,156 @@
+{
+  "_comment": "Sample report showing expected output of a successful Phase 7 pilot run.",
+  "generatedAt": "2026-06-13T18:30:00.000Z",
+  "passedAcceptanceCriteria": true,
+
+  "metrics": {
+    "totalActions": 22,
+    "humanInterventions": 3,
+    "interventionPct": 12.0,
+    "underThreshold": true,
+    "elapsedMs": 87400,
+    "approvedGates": [
+      "github.create_branch",
+      "github.batch_commit",
+      "github.open_pr"
+    ],
+    "deniedGates": [],
+    "unexpectedGates": []
+  },
+
+  "actionBreakdown": {
+    "_comment": "22 total actions, 3 human = 12% intervention (well under 20% target)",
+    "auto_actions": [
+      "memory_load (Step 0)",
+      "repo_intelligence (Step 0)",
+      "debate_proposal x2 (Step 1)",
+      "debate_consensus (Step 1)",
+      "filesystem.read_file src/utils.ts (Step 2 - auto_allow)",
+      "filesystem.read_file src/utils.test.ts (Step 2 - auto_allow)",
+      "filesystem.write_file src/utils.ts (Step 2 - auto_allow: trusted role)",
+      "filesystem.write_file src/utils.test.ts (Step 2 - auto_allow: trusted role)",
+      "code_review_agent (Step 3 - auto)",
+      "test_plan_agent (Step 4 - auto)",
+      "safe_test_runner.run: unit (Step 5 - auto_allow gate)",
+      "security_review_agent (Step 6 - auto)",
+      "audit_verify (Step 7 - auto)",
+      "build_checklist (Step 8 - auto)",
+      "build_memory_refs (Step 9 - auto)",
+      "memory.write x3 (Step 10 - auto)",
+      "deliberation_complete broadcast"
+    ],
+    "human_gates": [
+      "github.create_branch → APPROVED",
+      "github.batch_commit (2 files) → APPROVED",
+      "github.open_pr → APPROVED"
+    ]
+  },
+
+  "onboarding": {
+    "projectId": "pilot-1718300000000",
+    "packageManager": "npm",
+    "isMonorepo": false,
+    "frameworks": [],
+    "testCommand": "node --import tsx/esm --test src/*.test.ts",
+    "lintCommand": "echo 'no linter configured'",
+    "typecheckCommand": null,
+    "hasTypeScript": true,
+    "hasCiConfig": false,
+    "memoriesWritten": 3,
+    "permissionRulesCreated": 3,
+    "completedAt": "2026-06-13T18:28:35.000Z"
+  },
+
+  "report": {
+    "projectId": "pilot-1718300000000",
+    "task": "Add a slugify(text: string): string utility function...",
+    "implementationPlan": "1. Read existing utils.ts to understand conventions\n2. Implement slugify() using regex chain\n3. Add 5 test cases to utils.test.ts\n4. Create feature branch, batch_commit both files, open PR",
+    "prUrl": "https://github.com/thirdeye2112/engineering-agent/pull/42",
+    "prNumber": 42,
+    "branch": "feature/add-slugify",
+    "filesModified": ["src/utils.ts", "src/utils.test.ts"],
+    "blockingObjections": [],
+    "totalCostUsd": 0.0187,
+
+    "codeReview": {
+      "verdict": "approve",
+      "rationale": "Clean implementation following existing code conventions. Regex chain is correct and well-tested. No security concerns.",
+      "requiredFixes": [],
+      "riskLevel": "low",
+      "securityConcerns": [],
+      "testingGaps": []
+    },
+
+    "testPlan": {
+      "summary": "Unit tests required; no integration or e2e needed for a pure string utility.",
+      "requiredBeforePr": [
+        { "description": "Test slugify with basic phrase", "type": "unit", "priority": "required_before_pr" },
+        { "description": "Test slugify with special characters", "type": "unit", "priority": "required_before_pr" },
+        { "description": "Test slugify edge cases (empty string, already slugified)", "type": "unit", "priority": "required_before_pr" }
+      ],
+      "recommended": [],
+      "notApplicable": [
+        { "description": "Integration tests", "type": "integration", "priority": "not_applicable" }
+      ]
+    },
+
+    "testResults": [
+      {
+        "profile": "unit",
+        "status": "passed",
+        "exitCode": 0,
+        "durationMs": 1843,
+        "truncated": false,
+        "label": "node --import tsx/esm --test src/*.test.ts"
+      }
+    ],
+
+    "checklist": {
+      "taskSummary": "Add slugify() utility with full test coverage",
+      "filesChanged": ["src/utils.ts", "src/utils.test.ts"],
+      "agentReasoning": "Standard regex-based slug transformation; low risk pure string function",
+      "securityReviewPassed": true,
+      "testPlanComplete": true,
+      "humanApprovalsObtained": true,
+      "auditChainValid": true,
+      "codeReviewVerdict": "approve",
+      "testResults": [{ "profile": "unit", "status": "passed", "durationMs": 1843 }],
+      "requiredTestsPassed": true,
+      "blockers": [],
+      "warnings": [],
+      "readyToMerge": true
+    },
+
+    "memoryReferences": [
+      {
+        "memoryId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "category": "repo_convention",
+        "title": "Package manager: npm",
+        "confidence": 0.95,
+        "influence": "applied"
+      },
+      {
+        "memoryId": "b2c3d4e5-f6a7-8901-bcde-f01234567891",
+        "category": "repo_convention",
+        "title": "Test command: node --import tsx/esm --test src/*.test.ts",
+        "confidence": 0.9,
+        "influence": "applied"
+      },
+      {
+        "memoryId": "c3d4e5f6-a7b8-9012-cdef-012345678912",
+        "category": "repo_convention",
+        "title": "TypeScript project",
+        "confidence": 0.95,
+        "influence": "applied"
+      }
+    ],
+
+    "completedAt": "2026-06-13T18:29:57.000Z"
+  },
+
+  "auditVerification": {
+    "valid": true,
+    "checkedCount": 34,
+    "firstInvalidId": null
+  }
+}

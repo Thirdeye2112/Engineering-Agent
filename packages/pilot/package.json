@@ -1,0 +1,24 @@
+{
+  "name": "@consensus/pilot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "pilot": "tsx src/run-pilot.ts",
+    "pilot:auto": "tsx src/run-pilot.ts --auto-approve"
+  },
+  "dependencies": {
+    "@consensus/agent-manager": "workspace:*",
+    "@consensus/audit-log": "workspace:*",
+    "@consensus/db": "workspace:*",
+    "@consensus/memory": "workspace:*",
+    "@consensus/permissions": "workspace:*",
+    "@consensus/shared-types": "workspace:*",
+    "@consensus/tools": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.0"
+  }
+}

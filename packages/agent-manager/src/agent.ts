@@ -17,6 +17,13 @@ export interface AgentConfig {
   tools?: ITool[];
   permissionLevel?: 'read' | 'write' | 'admin';
   auditLog?: (action: string, detail: unknown) => Promise<void>;
+  /**
+   * When > 0, useTool() polls for human approval instead of returning immediately
+   * with pendingApproval=true. This enables the agent to resume after a human
+   * approves a gate rather than treating the pending state as a hard failure.
+   * Set to 0 (default) for fire-and-forget mode (approval must be pre-granted).
+   */
+  approvalTimeoutMs?: number;
 }
 
 function parseJSON<T>(raw: string, label: string): T {
@@ -237,14 +244,40 @@ export class Agent {
             `Agent ${this.config.role} wants to use ${tool.name}.${operation}`,
             projectId,
           );
-          await emit('tool.denied', { outputSummary: `Pending approval: ${requestId}` });
-          return {
-            success: false, output: null,
-            error: `Approval required for ${tool.name}.${operation}. Request ID: ${requestId}`,
-            pendingApproval: true,
-            requestId,
-            metadata: { durationMs: 0 },
-          };
+
+          // If approvalTimeoutMs is set, poll until the human resolves or timeout
+          const timeoutMs = this.config.approvalTimeoutMs ?? 0;
+          if (timeoutMs > 0) {
+            const deadline = Date.now() + timeoutMs;
+            let approved = false;
+            while (Date.now() < deadline) {
+              await new Promise(r => setTimeout(r, 1000));
+              const req = await permissionEngine.getRequest(requestId);
+              if (req?.status === 'approved') { approved = true; break; }
+              if (req?.status === 'denied') break;
+            }
+            if (approved) {
+              await emit('permission.evaluated', { outputSummary: `approved by human (waited)`, approvalStatus: 'approved' });
+              // Fall through to execute the tool below
+            } else {
+              await emit('tool.denied', { outputSummary: `Timed out or denied: ${requestId}` });
+              return {
+                success: false, output: null,
+                error: `Approval denied or timed out for ${tool.name}.${operation}. Request ID: ${requestId}`,
+                pendingApproval: false,
+                metadata: { durationMs: 0 },
+              };
+            }
+          } else {
+            await emit('tool.denied', { outputSummary: `Pending approval: ${requestId}` });
+            return {
+              success: false, output: null,
+              error: `Approval required for ${tool.name}.${operation}. Request ID: ${requestId}`,
+              pendingApproval: true,
+              requestId,
+              metadata: { durationMs: 0 },
+            };
+          }
         }
       } else {
         await emit('permission.evaluated', { outputSummary: 'approved by prior human decision', approvalStatus: 'approved' });

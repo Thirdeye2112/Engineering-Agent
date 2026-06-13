@@ -25,6 +25,12 @@ export interface PRWorkflowConfig {
   runTests?: boolean;
   /** Set false to disable memory loading/writing (default: true) */
   useMemory?: boolean;
+  /**
+   * When > 0, agent will poll for human approval instead of returning immediately
+   * with pendingApproval=true. Required for interactive pilot mode.
+   * Default: 0 (approval must be pre-granted via standing DB rules).
+   */
+  approvalTimeoutMs?: number;
   onEvent?: (event: PRWorkflowEvent) => void;
 }
 
@@ -123,6 +129,7 @@ export class PRWorkflow {
       task,
       tools,
       permissionLevel: 'write',
+      approvalTimeoutMs: this.config.approvalTimeoutMs,
     });
     await implementor.init();
 

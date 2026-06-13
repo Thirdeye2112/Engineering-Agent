@@ -1,0 +1,14 @@
+{
+  "name": "pilot-utils",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --import tsx/esm --test src/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'no linter configured'"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "@types/node": "^22.0.0"
+  }
+}

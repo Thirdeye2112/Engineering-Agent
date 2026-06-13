@@ -181,6 +181,17 @@ export const PRQualityChecklistSchema = z.object({
 });
 export type PRQualityChecklist = z.infer<typeof PRQualityChecklistSchema>;
 
+// ── Phase 5: Memory reference types ──────────────────────────────────────────
+
+export const MemoryReferenceSchema = z.object({
+  memoryId: z.string().uuid(),
+  category: z.string(),
+  title: z.string(),
+  confidence: z.number().min(0).max(1),
+  influence: z.enum(['applied', 'considered', 'rejected_as_outdated']),
+});
+export type MemoryReference = z.infer<typeof MemoryReferenceSchema>;
+
 export const PRWorkflowReportSchema = z.object({
   projectId: z.string(),
   task: z.string(),
@@ -196,6 +207,7 @@ export const PRWorkflowReportSchema = z.object({
   testResults: z.array(TestRunResultSchema).optional(),
   patchPreviews: z.array(PatchPreviewSchema).optional(),
   checklist: PRQualityChecklistSchema.optional(),
+  memoryReferences: z.array(MemoryReferenceSchema).optional(),
   blockingObjections: z.array(z.string()),
   totalCostUsd: z.number(),
   completedAt: z.string().datetime(),

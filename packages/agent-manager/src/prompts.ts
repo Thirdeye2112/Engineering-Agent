@@ -30,13 +30,22 @@ const AGENT_RESPONSE_SCHEMA = `{
   "blockingIssues": ["issue1 (when status=blocked)"]
 }`;
 
+export interface ImplementationContext {
+  memoryContext?: string;
+  repoIntelligenceContext?: string;
+}
+
 export function buildImplementationPrompt(
   role: AgentRole,
   task: string,
   implementationPlan: string,
   tools: ITool[],
+  ctx?: ImplementationContext,
 ): { systemPrompt: string; userMessage: string } {
   const toolList = tools.map(t => `- **${t.name}**: ${t.description}`).join('\n');
+  const memorySections = [ctx?.repoIntelligenceContext, ctx?.memoryContext]
+    .filter(Boolean)
+    .join('\n\n');
   return {
     systemPrompt: `${ROLE_DESCRIPTIONS[role]}
 
@@ -62,8 +71,25 @@ Rules:
 
 Agreed implementation plan:
 ${implementationPlan}
-
+${memorySections ? `\n${memorySections}\n` : ''}
 Start by reading the relevant files. Then implement the plan step by step.`,
+  };
+}
+
+export function buildProposalPromptWithContext(
+  role: AgentRole,
+  task: string,
+  tools: ITool[],
+  ctx?: ImplementationContext,
+): { systemPrompt: string; userMessage: string } {
+  const base = buildProposalPrompt(role, task, tools);
+  if (!ctx?.memoryContext && !ctx?.repoIntelligenceContext) return base;
+  const memorySections = [ctx?.repoIntelligenceContext, ctx?.memoryContext]
+    .filter(Boolean)
+    .join('\n\n');
+  return {
+    ...base,
+    userMessage: `${base.userMessage}\n\n${memorySections}`,
   };
 }
 

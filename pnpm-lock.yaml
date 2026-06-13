@@ -19,6 +19,9 @@ importers:
       '@consensus/db':
         specifier: workspace:*
         version: link:../db
+      '@consensus/memory':
+        specifier: workspace:*
+        version: link:../memory
       '@consensus/permissions':
         specifier: workspace:*
         version: link:../permissions
@@ -137,6 +140,25 @@ importers:
       drizzle-kit:
         specifier: ^0.28.0
         version: 0.28.1
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/memory:
+    dependencies:
+      '@consensus/audit-log':
+        specifier: workspace:*
+        version: link:../audit-log
+      '@consensus/db':
+        specifier: workspace:*
+        version: link:../db
+      '@consensus/secrets':
+        specifier: workspace:*
+        version: link:../secrets
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.21
       typescript:
         specifier: ^5.9.0
         version: 5.9.3

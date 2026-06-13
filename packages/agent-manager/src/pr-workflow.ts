@@ -3,16 +3,19 @@ import { DebateEngine, type AgentInputConfig } from './debate-engine.js';
 import { CodeReviewAgent, type CodeReviewInput } from './code-review-agent.js';
 import { TestPlanAgent } from './test-plan-agent.js';
 import type { IAIProvider } from './provider-interface.js';
-import type { AgentRole, PRWorkflowReport, PRQualityChecklist, PatchPreview, TestRunResult } from '@consensus/shared-types';
+import type { AgentRole, PRWorkflowReport, PRQualityChecklist, PatchPreview, TestRunResult, MemoryReference } from '@consensus/shared-types';
 import type { ITool } from '@consensus/tools';
 import { FilesystemTool, SafeTestRunner } from '@consensus/tools';
 import type { TestProfileConfig } from '@consensus/tools';
 import { TerminalTool } from '@consensus/tools';
 import { auditLog } from '@consensus/audit-log';
+import { projectMemory, analyzeRepo, formatRepoIntelligenceForPrompt } from '@consensus/memory';
+import type { MemoryRecord } from '@consensus/memory';
 
 export interface PRWorkflowConfig {
   projectId: string;
   task: string;
+  repoFullName?: string;
   agents: AgentInputConfig[];
   tools?: ITool[];
   sandboxRoot?: string;
@@ -20,6 +23,8 @@ export interface PRWorkflowConfig {
   testProfiles?: TestProfileConfig;
   /** Set false to skip test execution entirely (default: true when testProfiles provided) */
   runTests?: boolean;
+  /** Set false to disable memory loading/writing (default: true) */
+  useMemory?: boolean;
   onEvent?: (event: PRWorkflowEvent) => void;
 }
 
@@ -37,6 +42,8 @@ export type PRWorkflowEvent =
   | { type: 'test_plan_complete'; requiredCount: number }
   | { type: 'tests_started'; profiles: string[] }
   | { type: 'test_complete'; profile: string; status: string }
+  | { type: 'memory_loaded'; count: number }
+  | { type: 'memory_written'; count: number }
   | { type: 'workflow_complete'; report: PRWorkflowReport }
   | { type: 'workflow_error'; error: string };
 
@@ -45,7 +52,41 @@ export class PRWorkflow {
 
   async run(): Promise<PRWorkflowReport> {
     const { projectId, task, agents, onEvent } = this.config;
+    const repoFullName = this.config.repoFullName;
+    const useMemory = this.config.useMemory !== false;
     let totalCostUsd = 0;
+
+    // ── Step 0: Load memory + repo intelligence ───────────────────────────────
+    let loadedMemories: MemoryRecord[] = [];
+    let memoryContext = '';
+    let repoIntelligenceContext = '';
+
+    if (useMemory) {
+      try {
+        loadedMemories = await projectMemory.retrieve({
+          projectId,
+          repoFullName,
+          includeExpired: false,
+          includeSuperseded: false,
+          limit: 30,
+        });
+        memoryContext = projectMemory.formatForPrompt(loadedMemories);
+        onEvent?.({ type: 'memory_loaded', count: loadedMemories.length });
+      } catch (err) {
+        console.warn('[memory] load failed:', err);
+      }
+    }
+
+    const sandboxRoot = this.config.sandboxRoot ?? process.env.FILESYSTEM_SANDBOX_ROOT ?? './sandbox';
+
+    try {
+      const intel = analyzeRepo(sandboxRoot);
+      repoIntelligenceContext = formatRepoIntelligenceForPrompt(intel);
+    } catch (err) {
+      console.warn('[repo-intelligence] analysis failed:', err);
+    }
+
+    const implementationCtx = { memoryContext, repoIntelligenceContext };
 
     // ── Step 1: Debate round to agree on implementation plan ─────────────────
     onEvent?.({ type: 'debate_started' });
@@ -65,7 +106,6 @@ export class PRWorkflow {
 
     // ── Step 2: Architect implements using tools ─────────────────────────────
     const architectConfig = agents.find(a => a.role === 'architect') ?? agents[0];
-    const sandboxRoot = this.config.sandboxRoot ?? process.env.FILESYSTEM_SANDBOX_ROOT ?? './sandbox';
 
     const tools: ITool[] = this.config.tools ?? [
       new FilesystemTool(sandboxRoot),
@@ -316,6 +356,15 @@ export class PRWorkflow {
         (requiredTestsPassed !== false),
     };
 
+    // ── Step 9: Build memory references (which memories influenced this run) ──
+    const memoryReferences: MemoryReference[] = loadedMemories.map(m => ({
+      memoryId: m.id,
+      category: m.category,
+      title: m.title,
+      confidence: m.confidence,
+      influence: 'applied' as const,
+    }));
+
     const report: PRWorkflowReport = {
       projectId,
       task,
@@ -331,10 +380,104 @@ export class PRWorkflow {
       testResults: testResults.length > 0 ? testResults : undefined,
       patchPreviews: patchPreviews.length > 0 ? patchPreviews : undefined,
       checklist,
+      memoryReferences: memoryReferences.length > 0 ? memoryReferences : undefined,
       blockingObjections: allBlockingObjections,
       totalCostUsd,
       completedAt: new Date().toISOString(),
     };
+
+    // ── Step 10: Write post-run memory records ────────────────────────────────
+    if (useMemory) {
+      const memoryWrites: Array<Promise<string>> = [];
+
+      // Architecture decision: the chosen approach
+      memoryWrites.push(
+        projectMemory.write({
+          projectId,
+          repoFullName,
+          category: 'architecture_decision',
+          title: `Approach for: ${task.slice(0, 100)}`,
+          content: implementationPlan.slice(0, 2000),
+          sourceType: 'agent_decision',
+          sourceId: prUrl ?? projectId,
+          confidence: 0.85,
+        }).catch(err => { console.warn('[memory] write failed:', err); return ''; }),
+      );
+
+      // Prior PR outcome
+      if (prUrl) {
+        memoryWrites.push(
+          projectMemory.write({
+            projectId,
+            repoFullName,
+            category: 'prior_pr_outcome',
+            title: `PR outcome: ${task.slice(0, 80)}`,
+            content: [
+              `PR: ${prUrl}`,
+              `Files: ${filesModified.join(', ')}`,
+              `Blockers: ${allBlockingObjections.join('; ') || 'none'}`,
+              `Code review: ${codeReview?.verdict ?? 'not run'}`,
+              `Tests passed: ${requiredTestsPassed ?? 'not run'}`,
+            ].join('\n'),
+            sourceType: 'pr_outcome',
+            sourceId: prUrl,
+            confidence: 0.9,
+          }).catch(err => { console.warn('[memory] write failed:', err); return ''; }),
+        );
+      }
+
+      // Rejected approaches from debate dissent
+      if (debateReport.consensus.dissent.length > 0) {
+        memoryWrites.push(
+          projectMemory.write({
+            projectId,
+            repoFullName,
+            category: 'rejected_pattern',
+            title: `Rejected approaches for: ${task.slice(0, 80)}`,
+            content: debateReport.consensus.dissent.join('\n'),
+            sourceType: 'agent_decision',
+            sourceId: projectId,
+            confidence: 0.7,
+          }).catch(err => { console.warn('[memory] write failed:', err); return ''; }),
+        );
+      }
+
+      // Security constraint if blocking security issues found
+      if ((securityReview?.blockingIssues.length ?? 0) > 0) {
+        memoryWrites.push(
+          projectMemory.write({
+            projectId,
+            repoFullName,
+            category: 'security_constraint',
+            title: `Security issues in: ${task.slice(0, 80)}`,
+            content: securityReview!.blockingIssues.join('\n'),
+            sourceType: 'review_finding',
+            sourceId: prUrl ?? projectId,
+            confidence: 0.95,
+          }).catch(err => { console.warn('[memory] write failed:', err); return ''; }),
+        );
+      }
+
+      // Recurring test failure record
+      const failedTests = testResults.filter(r => r.status === 'failed' || r.status === 'timeout');
+      if (failedTests.length > 0) {
+        memoryWrites.push(
+          projectMemory.write({
+            projectId,
+            repoFullName,
+            category: 'recurring_test_failure',
+            title: `Test failures in: ${task.slice(0, 80)}`,
+            content: failedTests.map(t => `${t.profile}: ${t.error ?? t.status}`).join('\n'),
+            sourceType: 'test_result',
+            sourceId: projectId,
+            confidence: 0.8,
+          }).catch(err => { console.warn('[memory] write failed:', err); return ''; }),
+        );
+      }
+
+      const written = (await Promise.all(memoryWrites)).filter(Boolean);
+      onEvent?.({ type: 'memory_written', count: written.length });
+    }
 
     onEvent?.({ type: 'workflow_complete', report });
     return report;

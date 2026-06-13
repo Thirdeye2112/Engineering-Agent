@@ -187,6 +187,17 @@ app.post('/permission-requests/:requestId/deny', async (req, res) => {
   res.json({ ok: true });
 });
 
+// Allow frontend to update runtime API keys (local dev only)
+const ALLOWED_ENV_KEYS = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY', 'GITHUB_TOKEN', 'FILESYSTEM_SANDBOX_ROOT'];
+app.post('/credentials', (req, res) => {
+  for (const [k, v] of Object.entries(req.body)) {
+    if (ALLOWED_ENV_KEYS.includes(k) && typeof v === 'string' && v.length > 4) {
+      process.env[k] = v;
+    }
+  }
+  res.json({ ok: true });
+});
+
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 
 async function start() {

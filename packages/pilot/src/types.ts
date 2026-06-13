@@ -11,7 +11,8 @@ export type FailureReason =
   | 'permission_denial'
   | 'github_api_error'
   | 'audit_verification_failure'
-  | 'memory_repo_intelligence_mismatch';
+  | 'memory_repo_intelligence_mismatch'
+  | 'api_quota_exceeded';
 
 export type RunStatus = 'pr_opened' | 'failed' | 'retried_and_passed' | 'retried_and_failed';
 

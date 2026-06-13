@@ -47,6 +47,10 @@ export class FailureClassifier {
       return { reason: 'permission_denial', detail: err.slice(0, 200) };
     }
 
+    if (err.includes('credit balance') || err.includes('insufficient_quota') || err.includes('billing')) {
+      return { reason: 'api_quota_exceeded', detail: err.slice(0, 200) };
+    }
+
     if (err.includes('github') || err.includes('GitHub') || err.includes('octokit') ||
         err.includes('rate limit') || err.includes('422') || err.includes('404')) {
       return { reason: 'github_api_error', detail: err.slice(0, 200) };
@@ -65,7 +69,7 @@ export class FailureClassifier {
     }
 
     // Generic implementation failure
-    const detail = report.blockingObjections?.join('; ') ?? err.slice(0, 200) ?? 'unknown error';
+    const detail = report.blockingObjections?.join('; ') || err.slice(0, 200) || 'unknown error';
     return { reason: 'agent_implementation_error', detail };
   }
 

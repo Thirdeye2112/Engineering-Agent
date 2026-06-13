@@ -1,0 +1,27 @@
+{
+  "name": "@consensus/api-server",
+  "version": "1.0.0",
+  "main": "./src/index.ts",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "esbuild src/index.ts --bundle --platform=node --outfile=dist/index.js"
+  },
+  "dependencies": {
+    "@consensus/agent-manager": "workspace:*",
+    "@consensus/db": "workspace:*",
+    "@consensus/shared-types": "workspace:*",
+    "express": "^5.0.0",
+    "ws": "^8.18.0",
+    "zod": "^3.23.0",
+    "uuid": "^11.0.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/ws": "^8.5.13",
+    "@types/node": "^22.0.0",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.19.2",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.9.0"
+  }
+}

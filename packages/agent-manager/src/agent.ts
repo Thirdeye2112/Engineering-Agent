@@ -1,0 +1,101 @@
+import type { IAIProvider } from './provider-interface.js';
+import { conversationStore } from './conversation-store.js';
+import { buildProposalPrompt, buildCritiquePrompt, buildRevisionPrompt, buildVotePrompt } from './prompts.js';
+import { AgentProposalSchema, AgentCritiqueSchema, VoteSchema } from '@consensus/shared-types';
+import type { AgentRole, AgentProposal, AgentCritique, Vote } from '@consensus/shared-types';
+import { createProvider } from './provider-factory.js';
+
+export interface AgentConfig {
+  provider: IAIProvider;
+  role: AgentRole;
+  deliberationId: string;
+  task: string;
+}
+
+function parseJSON<T>(raw: string, label: string): T {
+  // Strip markdown code fences if present
+  const cleaned = raw.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch {
+    throw new Error(`Failed to parse ${label} JSON: ${raw.slice(0, 200)}`);
+  }
+}
+
+export class Agent {
+  private threadId: string;
+  private totalCostUsd = 0;
+
+  constructor(private config: AgentConfig) {
+    this.threadId = `${config.deliberationId}:${config.role}`;
+  }
+
+  async init(): Promise<void> {
+    const existing = await conversationStore.getThread(this.threadId);
+    if (!existing) {
+      await conversationStore.createThread(this.threadId, this.config.role, this.config.deliberationId);
+    }
+  }
+
+  get costUsd(): number { return this.totalCostUsd; }
+
+  private async call(systemPrompt: string, userMessage: string): Promise<string> {
+    const thread = await conversationStore.getThread(this.threadId);
+    if (!thread) throw new Error(`Thread ${this.threadId} not found — call init() first`);
+
+    const messages = [
+      { role: 'system' as const, content: systemPrompt },
+      ...thread.messages,
+      { role: 'user' as const, content: userMessage },
+    ];
+
+    const resp = await this.config.provider.sendMessage({ messages });
+    this.totalCostUsd += resp.costUsd;
+
+    await conversationStore.appendExchange(
+      this.threadId,
+      { role: 'user', content: userMessage },
+      { role: 'assistant', content: resp.content },
+    );
+
+    return resp.content;
+  }
+
+  async propose(): Promise<AgentProposal> {
+    const { systemPrompt, userMessage } = buildProposalPrompt(this.config.role, this.config.task);
+    const raw = await this.call(systemPrompt, userMessage);
+    const parsed = parseJSON<unknown>(raw, 'proposal');
+    return AgentProposalSchema.parse(parsed);
+  }
+
+  async critique(peerRole: string, peerProposal: AgentProposal): Promise<AgentCritique> {
+    const { systemPrompt, userMessage } = buildCritiquePrompt(
+      this.config.role, this.config.task, peerRole, peerProposal,
+    );
+    const raw = await this.call(systemPrompt, userMessage);
+    const parsed = parseJSON<unknown>(raw, 'critique');
+    return AgentCritiqueSchema.parse(parsed);
+  }
+
+  async revise(originalProposal: AgentProposal, critiques: Array<{ role: string; critique: unknown }>): Promise<AgentProposal> {
+    const { systemPrompt, userMessage } = buildRevisionPrompt(
+      this.config.role, this.config.task, originalProposal, critiques,
+    );
+    const raw = await this.call(systemPrompt, userMessage);
+    const parsed = parseJSON<unknown>(raw, 'revised proposal');
+    return AgentProposalSchema.parse(parsed);
+  }
+
+  async vote(proposals: Array<{ role: string; proposal: AgentProposal }>): Promise<Vote> {
+    const { systemPrompt, userMessage } = buildVotePrompt(this.config.role, this.config.task, proposals);
+    const raw = await this.call(systemPrompt, userMessage);
+    const parsed = parseJSON<unknown>(raw, 'vote');
+    return VoteSchema.parse(parsed);
+  }
+
+  async escalate(reason: string): Promise<IAIProvider> {
+    const tierMap = { fast: 'standard', standard: 'premium', premium: 'premium' } as const;
+    const nextTier = tierMap[this.config.provider.tier];
+    return createProvider(this.config.provider.provider, nextTier);
+  }
+}

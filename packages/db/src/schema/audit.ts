@@ -1,6 +1,7 @@
-import { pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uuid, serial } from 'drizzle-orm/pg-core';
 
 export const auditEvents = pgTable('audit_events', {
+  seq: serial('seq').notNull(),
   id: uuid('id').primaryKey().defaultRandom(),
   projectId: text('project_id'),
   actorType: text('actor_type').notNull(), // 'user' | 'agent' | 'system' | 'tool'

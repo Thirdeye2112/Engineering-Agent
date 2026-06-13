@@ -51,7 +51,7 @@ export class AuditLog {
     const lastRow = await db
       .select({ eventHash: auditEvents.eventHash })
       .from(auditEvents)
-      .orderBy(desc(auditEvents.createdAt))
+      .orderBy(desc(auditEvents.seq))
       .limit(1);
 
     const previousEventHash = lastRow[0]?.eventHash ?? GENESIS_HASH;
@@ -92,7 +92,7 @@ export class AuditLog {
     const rows = await db
       .select()
       .from(auditEvents)
-      .orderBy(auditEvents.createdAt);
+      .orderBy(auditEvents.seq);
 
     // Filter to project if specified (but chain is global so we verify full chain)
     let expectedPrev = GENESIS_HASH;

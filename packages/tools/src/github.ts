@@ -27,6 +27,17 @@ export interface GitHubInput {
 const PROTECTED_BRANCHES = new Set(['main', 'master', 'production', 'prod', 'release']);
 const VALID_OPS: GitHubOperation[] = ['get_repo','list_files','read_file','create_branch','commit_file','open_pr'];
 
+/** Sanitize a branch name to a safe slug. Removes leading/trailing slashes and
+ *  collapses any sequence of chars that aren't alphanumeric, hyphen, or underscore
+ *  into a single hyphen. Truncates to 100 chars. */
+function slugifyBranch(name: string): string {
+  return name
+    .replace(/[^a-zA-Z0-9/_.-]/g, '-')
+    .replace(/\/{2,}/g, '/')
+    .replace(/^[/.-]+|[/.-]+$/g, '')
+    .slice(0, 100);
+}
+
 export class GitHubTool implements ITool {
   readonly name = 'github';
   readonly description = 'Read GitHub repos and propose changes via feature branches and PRs. Never commits to main/master.';
@@ -78,12 +89,9 @@ export class GitHubTool implements ITool {
     const v = this.validate(input);
     if (!v.valid) return { success: false, output: null, error: v.error, metadata: { durationMs: 0 } };
 
-    const inp = input as GitHubInput;
+    let inp = input as GitHubInput;
     const start = Date.now();
 
-    if (inp.operation === 'commit_file' && inp.branch && PROTECTED_BRANCHES.has(inp.branch.toLowerCase())) {
-      return { success: false, output: null, error: `Commit to protected branch '${inp.branch}' is always denied.`, metadata: { durationMs: 0 } };
-    }
     if (inp.operation === 'open_pr' && inp.head && PROTECTED_BRANCHES.has(inp.head.toLowerCase())) {
       return { success: false, output: null, error: `Cannot open PR from protected branch '${inp.head}' as head.`, metadata: { durationMs: 0 } };
     }
@@ -116,8 +124,11 @@ export class GitHubTool implements ITool {
         }
         case 'create_branch': {
           if (!inp.branch) return { success: false, output: null, error: 'branch is required', metadata: { durationMs: 0 } };
-          if (PROTECTED_BRANCHES.has(inp.branch.toLowerCase()))
-            return { success: false, output: null, error: `Cannot create protected branch '${inp.branch}'`, metadata: { durationMs: 0 } };
+          const sanitizedBranch = slugifyBranch(inp.branch);
+          if (!sanitizedBranch) return { success: false, output: null, error: 'branch name is invalid after sanitization', metadata: { durationMs: 0 } };
+          if (PROTECTED_BRANCHES.has(sanitizedBranch.toLowerCase()))
+            return { success: false, output: null, error: `Cannot create protected branch '${sanitizedBranch}'`, metadata: { durationMs: 0 } };
+          inp = { ...inp, branch: sanitizedBranch };
           const baseBranch = inp.baseBranch ?? 'main';
           const ref = await this.api<{ object: { sha: string } }>('GET',
             `/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(baseBranch)}`);
@@ -129,8 +140,12 @@ export class GitHubTool implements ITool {
         case 'commit_file': {
           if (!inp.path || !inp.branch || inp.content === undefined || !inp.message)
             return { success: false, output: null, error: 'path, branch, content, and message are required', metadata: { durationMs: 0 } };
+          if (PROTECTED_BRANCHES.has(inp.branch.toLowerCase()))
+            return { success: false, output: null, error: `Commit to protected branch '${inp.branch}' is always denied.`, metadata: { durationMs: 0 } };
           if (redact(inp.content) !== inp.content)
             return { success: false, output: null, error: 'Commit blocked: content contains detected secret patterns.', metadata: { durationMs: 0 } };
+          if (redact(inp.message) !== inp.message)
+            return { success: false, output: null, error: 'Commit blocked: commit message contains detected secret patterns.', metadata: { durationMs: 0 } };
           let existingSha: string | undefined;
           try {
             const ex = await this.api<{ sha: string }>('GET', `/repos/${owner}/${repo}/contents/${inp.path}?ref=${encodeURIComponent(inp.branch)}`);
@@ -149,6 +164,8 @@ export class GitHubTool implements ITool {
         case 'open_pr': {
           if (!inp.title || !inp.head)
             return { success: false, output: null, error: 'title and head branch are required', metadata: { durationMs: 0 } };
+          if (inp.body && redact(inp.body) !== inp.body)
+            return { success: false, output: null, error: 'PR blocked: body contains detected secret patterns.', metadata: { durationMs: 0 } };
           const pr = await this.api<{ number: number; html_url: string; title: string; state: string }>('POST',
             `/repos/${owner}/${repo}/pulls`,
             { title: inp.title, body: inp.body ?? '', head: inp.head, base: inp.base ?? 'main' });

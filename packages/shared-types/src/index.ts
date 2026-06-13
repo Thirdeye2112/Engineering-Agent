@@ -106,6 +106,61 @@ export const SecurityReviewSchema = z.object({
 });
 export type SecurityReview = z.infer<typeof SecurityReviewSchema>;
 
+// ── Phase 3: Code review + test plan types ───────────────────────────────────
+
+export const CodeReviewVerdictSchema = z.enum(['approve', 'request_changes', 'block']);
+export type CodeReviewVerdict = z.infer<typeof CodeReviewVerdictSchema>;
+
+export const CodeReviewResultSchema = z.object({
+  verdict: CodeReviewVerdictSchema,
+  rationale: z.string(),
+  requiredFixes: z.array(z.string()),
+  riskLevel: z.enum(['low', 'medium', 'high', 'critical']),
+  securityConcerns: z.array(z.string()),
+  testingGaps: z.array(z.string()),
+});
+export type CodeReviewResult = z.infer<typeof CodeReviewResultSchema>;
+
+export const TestPlanItemSchema = z.object({
+  description: z.string(),
+  type: z.enum(['unit', 'integration', 'e2e', 'manual']),
+  priority: z.enum(['required_before_pr', 'recommended', 'not_applicable']),
+});
+export type TestPlanItem = z.infer<typeof TestPlanItemSchema>;
+
+export const TestPlanResultSchema = z.object({
+  requiredBeforePr: z.array(TestPlanItemSchema),
+  recommended: z.array(TestPlanItemSchema),
+  notApplicable: z.array(TestPlanItemSchema),
+  summary: z.string(),
+});
+export type TestPlanResult = z.infer<typeof TestPlanResultSchema>;
+
+export const PatchPreviewSchema = z.object({
+  path: z.string(),
+  originalSnippet: z.string(),
+  proposedSnippet: z.string(),
+  reason: z.string(),
+  riskLevel: z.enum(['low', 'medium', 'high', 'critical']),
+  reviewerVerdict: CodeReviewVerdictSchema.optional(),
+});
+export type PatchPreview = z.infer<typeof PatchPreviewSchema>;
+
+export const PRQualityChecklistSchema = z.object({
+  taskSummary: z.string(),
+  filesChanged: z.array(z.string()),
+  agentReasoning: z.string(),
+  securityReviewPassed: z.boolean(),
+  testPlanComplete: z.boolean(),
+  humanApprovalsObtained: z.boolean(),
+  auditChainValid: z.boolean(),
+  codeReviewVerdict: CodeReviewVerdictSchema.optional(),
+  blockers: z.array(z.string()),
+  warnings: z.array(z.string()),
+  readyToMerge: z.boolean(),
+});
+export type PRQualityChecklist = z.infer<typeof PRQualityChecklistSchema>;
+
 export const PRWorkflowReportSchema = z.object({
   projectId: z.string(),
   task: z.string(),
@@ -116,6 +171,10 @@ export const PRWorkflowReportSchema = z.object({
   branch: z.string().optional(),
   filesModified: z.array(z.string()),
   securityReview: SecurityReviewSchema.optional(),
+  codeReview: CodeReviewResultSchema.optional(),
+  testPlan: TestPlanResultSchema.optional(),
+  patchPreviews: z.array(PatchPreviewSchema).optional(),
+  checklist: PRQualityChecklistSchema.optional(),
   blockingObjections: z.array(z.string()),
   totalCostUsd: z.number(),
   completedAt: z.string().datetime(),

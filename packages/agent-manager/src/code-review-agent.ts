@@ -1,0 +1,85 @@
+import type { IAIProvider } from './provider-interface.js';
+import type { CodeReviewResult } from '@consensus/shared-types';
+import { CodeReviewResultSchema } from '@consensus/shared-types';
+
+function parseJSON<T>(raw: string): T {
+  let cleaned = raw
+    .replace(/^```(?:json)?\s*/m, '')
+    .replace(/\s*```\s*$/m, '')
+    .trim();
+  const objStart = cleaned.indexOf('{');
+  if (objStart > 0) cleaned = cleaned.slice(objStart);
+  const end = (() => {
+    let depth = 0;
+    for (let i = 0; i < cleaned.length; i++) {
+      if (cleaned[i] === '{') depth++;
+      else if (cleaned[i] === '}') { depth--; if (depth === 0) return i; }
+    }
+    return -1;
+  })();
+  if (end !== -1) cleaned = cleaned.slice(0, end + 1);
+  return JSON.parse(cleaned) as T;
+}
+
+const SYSTEM_PROMPT = `You are a code reviewer. Your job is to review proposed file changes before they are approved.
+
+For each review you must:
+1. Identify bugs, unsafe patterns, missing error handling
+2. Flag security issues (injection, path traversal, secret exposure, etc.)
+3. Identify architectural drift from the existing codebase style
+4. Note missing tests for critical paths
+5. Decide a verdict: "approve", "request_changes", or "block"
+
+Verdict rules:
+- "block": critical security vulnerabilities, data loss risk, or fundamentally broken code
+- "request_changes": bugs, missing tests for critical paths, or style violations
+- "approve": change is correct, reasonably safe, and consistent with the codebase
+
+Respond ONLY with valid JSON:
+{
+  "verdict": "approve" | "request_changes" | "block",
+  "rationale": "string",
+  "requiredFixes": ["fix1", "fix2"],
+  "riskLevel": "low" | "medium" | "high" | "critical",
+  "securityConcerns": ["concern1"],
+  "testingGaps": ["gap1"]
+}`;
+
+export interface CodeReviewInput {
+  path: string;
+  originalContent: string;
+  proposedContent: string;
+  taskContext: string;
+}
+
+export class CodeReviewAgent {
+  constructor(private provider: IAIProvider) {}
+
+  async review(inputs: CodeReviewInput[]): Promise<CodeReviewResult> {
+    const diffSection = inputs.map(({ path, originalContent, proposedContent }) => {
+      return [
+        `### File: ${path}`,
+        `**Original:**\n\`\`\`\n${originalContent.slice(0, 2000)}\n\`\`\``,
+        `**Proposed:**\n\`\`\`\n${proposedContent.slice(0, 2000)}\n\`\`\``,
+      ].join('\n');
+    }).join('\n\n---\n\n');
+
+    const userMessage = [
+      `Task context: ${inputs[0]?.taskContext ?? 'No context provided'}`,
+      '',
+      'Proposed changes to review:',
+      diffSection,
+    ].join('\n');
+
+    const resp = await this.provider.sendMessage({
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: userMessage },
+      ],
+      maxTokens: 1024,
+    });
+
+    const parsed = parseJSON<unknown>(resp.content);
+    return CodeReviewResultSchema.parse(parsed);
+  }
+}

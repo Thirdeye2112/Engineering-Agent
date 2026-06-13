@@ -103,7 +103,7 @@ describe('FilesystemTool – adversarial inputs', () => {
     // to the sandbox (content is NOT /etc/passwd content).
     if (result.success) {
       // If it somehow succeeded, the output must be the sandbox file content
-      assert.notMatch(String(result.output), /root:|nobody:/,
+      assert.doesNotMatch(String(result.output), /root:|nobody:/,
         'must not have read /etc/passwd via null-byte trick');
     } else {
       assert.equal(result.success, false);

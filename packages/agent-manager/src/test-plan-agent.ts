@@ -68,7 +68,18 @@ export class TestPlanAgent {
       maxTokens: 1024,
     });
 
-    const parsed = parseJSON<unknown>(resp.content);
+    let parsed: unknown;
+    try {
+      parsed = parseJSON<unknown>(resp.content);
+    } catch {
+      // LLM response was truncated mid-JSON — return a minimal valid plan
+      return {
+        requiredBeforePr: [],
+        recommended: [],
+        notApplicable: [{ description: 'Test plan could not be parsed (LLM truncation)', type: 'unit', priority: 'not_applicable' }],
+        summary: 'Test plan unavailable due to LLM response truncation.',
+      };
+    }
     return TestPlanResultSchema.parse(parsed);
   }
 }

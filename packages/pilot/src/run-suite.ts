@@ -32,7 +32,12 @@ const FAST_TIER = (process.env.PILOT_FAST_TIER ?? 'fast') as TierName;
 const APPROVAL_TIMEOUT_MS = parseInt(process.env.PILOT_APPROVAL_TIMEOUT_MS ?? '120000', 10);
 const GITHUB_REPO = process.env.GITHUB_REPO ?? '';
 const SCOREBOARD_PATH = path.resolve('./pilot-scoreboard.json');
-const EXPECTED_GATES = ['github.create_branch', 'github.batch_commit', 'github.open_pr'];
+const EXPECTED_GATES = [
+  'github.create_branch',
+  'github.batch_commit',
+  'github.open_pr',
+  'terminal.run',   // safe_test_runner delegates to terminal tool in sandbox
+];
 
 /** Create a fresh copy of the fixture for each run to avoid state bleed. */
 function cloneFixture(taskId: string): string {

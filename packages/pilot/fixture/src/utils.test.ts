@@ -24,6 +24,15 @@ describe('truncate', () => {
   it('truncates at exact limit boundary', () => {
     assert.equal(truncate('hello', 5), 'hello');
   });
+  it('returns unchanged when maxLen equals string length', () => {
+    assert.equal(truncate('abcde', 5), 'abcde');
+  });
+  it('returns only ellipsis when maxLen is 0', () => {
+    assert.equal(truncate('hello', 0), '...');
+  });
+  it('truncates string containing only spaces', () => {
+    assert.equal(truncate('   ', 1), ' ...');
+  });
 });
 
 describe('camelCase', () => {

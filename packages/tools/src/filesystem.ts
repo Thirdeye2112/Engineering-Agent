@@ -24,6 +24,7 @@ export class FilesystemTool implements ITool {
     delete_file: 'approval_required',
   };
 
+  private readonly sandboxRoot: string;
   private trustedRoles: Set<string>;
 
   constructor(sandboxRoot: string, options?: { trustedRoles?: string[] }) {
@@ -36,7 +37,7 @@ export class FilesystemTool implements ITool {
    * The sandbox boundary itself limits blast radius; human approval still covers the
    * downstream commit step.
    */
-  getGate(operation: string, context: Pick<ToolContext, 'agentId'>): GateType {
+  getGate(operation: string, context: Pick<ToolContext, 'agentId' | 'projectId'>): GateType {
     if (SANDBOX_WRITE_OPS.has(operation)) {
       // agentId is "<deliberationId>:<role>" — extract the role suffix
       const role = context.agentId.split(':').pop() ?? '';

@@ -163,7 +163,7 @@ describe('ITool.getGate override contract', () => {
 
   it('SafeTestRunner does not implement getGate (static gate sufficient)', () => {
     const runner = new SafeTestRunner();
-    assert.equal(runner.getGate, undefined);
+    assert.ok(!('getGate' in runner) || typeof (runner as unknown as Record<string, unknown>)['getGate'] === 'undefined');
   });
 });
 

@@ -36,4 +36,7 @@ describe('camelCase', () => {
   it('handles single word', () => {
     assert.equal(camelCase('Hello'), 'hello');
   });
+  it('regression: single lowercase word stays lowercase', () => {
+    assert.equal(camelCase('hello'), 'hello');
+  });
 });

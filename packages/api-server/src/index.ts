@@ -2,7 +2,8 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
-import { getDb, projects, subtasks } from '@consensus/db';
+import { getDb, projects, subtasks, permissionRequests } from '@consensus/db';
+import { permissionEngine } from '@consensus/permissions';
 import { conversationStore } from '@consensus/agent-manager';
 import { createProvider } from '@consensus/agent-manager';
 import { DebateEngine } from '@consensus/agent-manager';
@@ -107,7 +108,7 @@ app.post('/projects', async (req, res) => {
         const orchestrator = new CollaborationOrchestrator(projectId, provider);
         const results = await orchestrator.run(subtaskList);
 
-        const integrator = new IntegrationEngine(provider);
+        const integrator = new IntegrationEngine(provider, projectId);
         const integratedDocument = await integrator.integrate(projectReq.task, results);
 
         const report = {
@@ -158,6 +159,31 @@ app.post('/projects/:id/override', async (req, res) => {
   await db.update(projects)
     .set({ status: req.body.status ?? 'complete' })
     .where(eq(projects.id, req.params.id));
+  res.json({ ok: true });
+});
+
+// Permission approval flow
+app.get('/projects/:id/permission-requests', async (req, res) => {
+  const db = getDb();
+  const rows = await db.select().from(permissionRequests).where(eq(permissionRequests.projectId, req.params.id));
+  res.json(rows);
+});
+
+app.post('/permission-requests/:requestId/approve', async (req, res) => {
+  const { requestId } = req.params;
+  const reviewedBy = req.body.reviewedBy ?? 'human';
+  await permissionEngine.resolveRequest(requestId, 'approved', reviewedBy);
+  const request = await permissionEngine.getRequest(requestId);
+  if (request) broadcast(request.projectId, { type: 'permission_approved', requestId });
+  res.json({ ok: true });
+});
+
+app.post('/permission-requests/:requestId/deny', async (req, res) => {
+  const { requestId } = req.params;
+  const reviewedBy = req.body.reviewedBy ?? 'human';
+  await permissionEngine.resolveRequest(requestId, 'denied', reviewedBy);
+  const request = await permissionEngine.getRequest(requestId);
+  if (request) broadcast(request.projectId, { type: 'permission_denied', requestId });
   res.json({ ok: true });
 });
 

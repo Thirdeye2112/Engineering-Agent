@@ -1,4 +1,4 @@
-import type { Subtask, SubtaskResult } from '@consensus/shared-types';
+import type { Subtask, SubtaskResult, AgentRole } from '@consensus/shared-types';
 import type { IAIProvider } from './provider-interface.js';
 import { SubtaskExecutor } from './subtask-executor.js';
 
@@ -20,6 +20,28 @@ export class CollaborationOrchestrator {
       results.push(...waveResults);
     }
 
-    return results;
+    // Cross-review: each agent reviews peers' deliverables from its domain lens
+    const crossReviewConcerns = new Map<string, string[]>();
+    for (const result of results) {
+      const peers = results.filter(r => r.subtaskId !== result.subtaskId);
+      const executor = new SubtaskExecutor(
+        subtasks.find(s => s.id === result.subtaskId)!,
+        this.provider,
+        this.projectId,
+      );
+      for (const peer of peers) {
+        const concerns = await executor.crossReview(peer.deliverable, peer.agentRole as AgentRole);
+        if (concerns.length > 0) {
+          const key = peer.subtaskId;
+          crossReviewConcerns.set(key, [...(crossReviewConcerns.get(key) ?? []), ...concerns]);
+        }
+      }
+    }
+
+    // Merge cross-review concerns back into results
+    return results.map(r => ({
+      ...r,
+      concerns: [...r.concerns, ...(crossReviewConcerns.get(r.subtaskId) ?? [])],
+    }));
   }
 }

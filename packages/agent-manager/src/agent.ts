@@ -4,12 +4,17 @@ import { buildProposalPrompt, buildCritiquePrompt, buildRevisionPrompt, buildVot
 import { AgentProposalSchema, AgentCritiqueSchema, VoteSchema } from '@consensus/shared-types';
 import type { AgentRole, AgentProposal, AgentCritique, Vote } from '@consensus/shared-types';
 import { createProvider } from './provider-factory.js';
+import type { ITool, ToolContext, ToolResult } from '@consensus/tools';
+import { permissionEngine } from '@consensus/permissions';
 
 export interface AgentConfig {
   provider: IAIProvider;
   role: AgentRole;
   deliberationId: string;
   task: string;
+  tools?: ITool[];
+  permissionLevel?: 'read' | 'write' | 'admin';
+  auditLog?: (action: string, detail: unknown) => Promise<void>;
 }
 
 function parseJSON<T>(raw: string, label: string): T {
@@ -93,9 +98,63 @@ export class Agent {
     return VoteSchema.parse(parsed);
   }
 
-  async escalate(reason: string): Promise<IAIProvider> {
+  async escalate(_reason: string): Promise<IAIProvider> {
     const tierMap = { fast: 'standard', standard: 'premium', premium: 'premium' } as const;
     const nextTier = tierMap[this.config.provider.tier];
     return createProvider(this.config.provider.provider, nextTier);
+  }
+
+  // Permission check happens before execution — never after.
+  async useTool(tool: ITool, input: unknown, operation = 'execute'): Promise<ToolResult> {
+    const permLevel = this.config.permissionLevel ?? 'read';
+
+    // Check permission engine first — before any execution
+    const perm = await permissionEngine.check(
+      this.config.role,
+      tool.name,
+      operation,
+      { projectId: this.config.deliberationId, input },
+    );
+
+    if (!perm.allowed) {
+      // Also enforce local permission level as a fallback guard
+      const requiredWrite = tool.permissions.includes('write');
+      if (requiredWrite && permLevel === 'read') {
+        return {
+          success: false,
+          output: null,
+          error: `Permission denied: ${perm.reason}`,
+          metadata: { durationMs: 0 },
+        };
+      }
+      // If no DB rule but local level permits, allow through (open project default)
+    }
+
+    const auditLog = this.config.auditLog ?? (async () => {});
+    const context: ToolContext = {
+      agentId: this.threadId,
+      projectId: this.config.deliberationId,
+      permissionLevel: permLevel,
+      auditLog,
+    };
+
+    const result = await tool.execute(input, context);
+
+    // Append tool use + result to conversation thread so the agent sees what it did
+    await conversationStore.appendExchange(
+      this.threadId,
+      { role: 'user', content: `[tool_use] ${tool.name}: ${JSON.stringify(input)}` },
+      { role: 'assistant', content: `[tool_result] success=${result.success} output=${JSON.stringify(result.output)} ${result.error ? `error=${result.error}` : ''}` },
+    );
+
+    await auditLog('agent.useTool', {
+      agentRole: this.config.role,
+      tool: tool.name,
+      input,
+      success: result.success,
+      durationMs: result.metadata.durationMs,
+    });
+
+    return result;
   }
 }

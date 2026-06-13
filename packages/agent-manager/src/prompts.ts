@@ -1,5 +1,6 @@
 import type { AgentRole } from '@consensus/shared-types';
 import type { AgentProposal } from '@consensus/shared-types';
+import type { ITool } from '@consensus/tools';
 
 const ROLE_DESCRIPTIONS: Record<AgentRole, string> = {
   architect: 'You are a software architect. Focus on system design, scalability, and structural patterns.',
@@ -11,6 +12,30 @@ const ROLE_DESCRIPTIONS: Record<AgentRole, string> = {
   integrator: 'You are an integrator. Synthesize multiple perspectives into a unified, coherent solution.',
 };
 
+function buildToolsSection(tools: ITool[]): string {
+  if (tools.length === 0) return '';
+  const list = tools.map(t => `- ${t.name}: ${t.description}`).join('\n');
+  return `\n## Available tools\n${list}\n\nTo use a tool, include in your JSON response:\n"toolCalls": [{ "tool": "filesystem", "operation": "read_file", "path": "src/index.ts" }]\n`;
+}
+
+export function buildImplementationPrompt(
+  role: AgentRole,
+  task: string,
+  implementationPlan: string,
+  tools: ITool[],
+): { systemPrompt: string; userMessage: string } {
+  return {
+    systemPrompt: `${ROLE_DESCRIPTIONS[role]}
+
+You are implementing an agreed plan using available tools. Work iteratively: read files to understand, write files to implement, verify with tsc/eslint.${buildToolsSection(tools)}
+
+Respond with ONLY valid JSON matching this schema:
+${JSON_PROPOSAL_SCHEMA}
+Include a "toolCalls" array if you need to use tools.`,
+    userMessage: `Task: ${task}\n\nAgreed implementation plan:\n${implementationPlan}\n\nImplement this plan step by step. Report what you did and the outcome.`,
+  };
+}
+
 const JSON_PROPOSAL_SCHEMA = `{
   "recommendation": "string — your primary recommendation",
   "reasoning": ["string — reasoning step 1", "string — reasoning step 2"],
@@ -19,12 +44,12 @@ const JSON_PROPOSAL_SCHEMA = `{
   "confidence": 0.0-1.0
 }`;
 
-export function buildProposalPrompt(role: AgentRole, task: string): { systemPrompt: string; userMessage: string } {
+export function buildProposalPrompt(role: AgentRole, task: string, tools: ITool[] = []): { systemPrompt: string; userMessage: string } {
   return {
     systemPrompt: `${ROLE_DESCRIPTIONS[role]}
 
 You are participating in a multi-agent deliberation. Analyse the task from your role's perspective and respond with ONLY valid JSON matching this schema:
-${JSON_PROPOSAL_SCHEMA}
+${JSON_PROPOSAL_SCHEMA}${buildToolsSection(tools)}
 
 Rules:
 - reasoning must be an array of discrete steps (not a single block of text)

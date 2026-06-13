@@ -15,8 +15,14 @@ class ConversationStore {
   private readonly TTL = 3600; // 1 hour
 
   async connect(): Promise<void> {
-    this.redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379');
-    await this.redis.ping();
+    const url = process.env.REDIS_URL ?? process.env.UPSTASH_REDIS_REST_URL;
+    if (!url) return; // no Redis configured — use PostgreSQL only
+    try {
+      this.redis = new Redis(url);
+      await this.redis.ping();
+    } catch {
+      this.redis = null; // fall back to PostgreSQL silently
+    }
   }
 
   async disconnect(): Promise<void> {

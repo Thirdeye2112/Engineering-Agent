@@ -61,6 +61,8 @@ export class DebateEngine {
     }
 
     let previousRecommendations: string[] = [];
+    let previousCritiques = new Map<AgentRole, AgentCritique[]>();
+    let previousProposals = new Map<AgentRole, AgentProposal>();
 
     for (let round = 1; round <= this.config.maxRounds; round++) {
       this.config.onEvent?.({ type: 'round_started', round });
@@ -69,10 +71,21 @@ export class DebateEngine {
       const critiques = new Map<AgentRole, AgentCritique[]>();
       const votes = new Map<AgentRole, Vote>();
 
-      // Propose phase
+      // Propose/revise phase
       for (const [role, agent] of this.agents) {
         this.config.onEvent?.({ type: 'agent_thinking', role, phase: 'propose' });
-        const proposal = await agent.propose();
+        let proposal: AgentProposal;
+        if (round === 1) {
+          proposal = await agent.propose();
+        } else {
+          // Revise based on critiques received in the prior round
+          const receivedCritiques = [...previousCritiques.entries()]
+            .filter(([r]) => r !== role)
+            .map(([r, crits]) => ({ role: r, critique: crits.find(c => c.targetAgentRole === role) }))
+            .filter(x => x.critique !== undefined);
+          const prior = previousProposals.get(role)!;
+          proposal = await agent.revise(prior, receivedCritiques as Array<{ role: string; critique: AgentCritique }>);
+        }
         proposals.set(role, proposal);
         this.config.onEvent?.({ type: 'agent_position_ready', role, proposal });
 
@@ -103,6 +116,8 @@ export class DebateEngine {
 
       const result: RoundResult = { round, proposals, critiques, votes };
       this.roundResults.push(result);
+      previousProposals = proposals;
+      previousCritiques = critiques;
       this.config.onEvent?.({ type: 'round_complete', round, results: result });
 
       // Deadlock detection via Jaccard similarity

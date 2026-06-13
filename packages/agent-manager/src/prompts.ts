@@ -52,13 +52,14 @@ You are participating in a multi-agent deliberation. Analyse the task from your 
 ${JSON_PROPOSAL_SCHEMA}${buildToolsSection(tools)}
 
 Rules:
-- reasoning must be an array of discrete steps (not a single block of text)
-- assumptions must list things you are taking for granted
-- risks must list concrete failure modes
-- confidence is your own assessment of how solid your proposal is`,
+- Respond with ONLY the JSON object — no prose before or after, no markdown fences
+- reasoning: 2-4 concise bullet strings (not a paragraph)
+- assumptions: 1-3 strings
+- risks: 1-3 strings
+- confidence: 0.0-1.0 number`,
     userMessage: `Task: ${task}
 
-Analyse this task and provide your proposal as JSON.`,
+Respond with ONLY the JSON object.`,
   };
 }
 

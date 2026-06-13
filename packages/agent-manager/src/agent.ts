@@ -18,12 +18,36 @@ export interface AgentConfig {
 }
 
 function parseJSON<T>(raw: string, label: string): T {
-  // Strip markdown code fences if present
-  const cleaned = raw.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
+  // Strip all markdown code fences (anywhere in the string)
+  let cleaned = raw
+    .replace(/^```(?:json)?\s*/m, '')
+    .replace(/\s*```\s*$/m, '')
+    .trim();
+
+  // Find the outermost JSON object or array
+  const objStart = cleaned.indexOf('{');
+  const arrStart = cleaned.indexOf('[');
+  let start = -1;
+  if (objStart !== -1 && (arrStart === -1 || objStart < arrStart)) start = objStart;
+  else if (arrStart !== -1) start = arrStart;
+
+  if (start > 0) cleaned = cleaned.slice(start);
+
+  // Find the matching closing bracket
+  const opener = cleaned[0];
+  const closer = opener === '{' ? '}' : ']';
+  let depth = 0;
+  let end = -1;
+  for (let i = 0; i < cleaned.length; i++) {
+    if (cleaned[i] === opener) depth++;
+    else if (cleaned[i] === closer) { depth--; if (depth === 0) { end = i; break; } }
+  }
+  if (end !== -1) cleaned = cleaned.slice(0, end + 1);
+
   try {
     return JSON.parse(cleaned) as T;
   } catch {
-    throw new Error(`Failed to parse ${label} JSON: ${raw.slice(0, 200)}`);
+    throw new Error(`Failed to parse ${label} JSON: ${raw.slice(0, 300)}`);
   }
 }
 
@@ -54,7 +78,7 @@ export class Agent {
       { role: 'user' as const, content: userMessage },
     ];
 
-    const resp = await this.config.provider.sendMessage({ messages });
+    const resp = await this.config.provider.sendMessage({ messages, maxTokens: 2048 });
     this.totalCostUsd += resp.costUsd;
 
     await conversationStore.appendExchange(

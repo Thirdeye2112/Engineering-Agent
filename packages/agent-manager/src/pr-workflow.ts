@@ -5,7 +5,7 @@ import { TestPlanAgent } from './test-plan-agent.js';
 import type { IAIProvider } from './provider-interface.js';
 import type { AgentRole, PRWorkflowReport, PRQualityChecklist, PatchPreview, TestRunResult, MemoryReference } from '@consensus/shared-types';
 import type { ITool } from '@consensus/tools';
-import { FilesystemTool, SafeTestRunner } from '@consensus/tools';
+import { FilesystemTool, SafeTestRunner, GitHubTool } from '@consensus/tools';
 import type { TestProfileConfig } from '@consensus/tools';
 import { TerminalTool } from '@consensus/tools';
 import { auditLog } from '@consensus/audit-log';
@@ -119,6 +119,7 @@ export class PRWorkflow {
       // boundary limits blast radius; human approval still covers the commit step.
       new FilesystemTool(sandboxRoot, { trustedRoles: [implementorRole] }),
       new TerminalTool(),
+      ...(this.config.repoFullName ? [new GitHubTool()] : []),
     ];
     onEvent?.({ type: 'implementation_started', role: implementorRole });
 

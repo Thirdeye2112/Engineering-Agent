@@ -12,10 +12,15 @@ export class AnthropicProvider implements IAIProvider {
   constructor(tier: TierName) {
     this.tier = tier;
     this.model = MODEL_REGISTRY.anthropic[tier];
-    this.client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    // Support Replit AI integration env vars as fallback to manual API key
+    const apiKey = process.env.ANTHROPIC_API_KEY ?? process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
+    const baseURL = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL;
+    this.client = new Anthropic({ apiKey, ...(baseURL ? { baseURL } : {}) });
   }
 
-  isAvailable(): boolean { return !!process.env.ANTHROPIC_API_KEY; }
+  isAvailable(): boolean {
+    return !!(process.env.ANTHROPIC_API_KEY ?? process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY);
+  }
 
   estimateCost(inputTokens: number, outputTokens: number): number {
     const costs = COST_REGISTRY.anthropic[this.tier];

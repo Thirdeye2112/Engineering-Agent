@@ -12,10 +12,14 @@ export class OpenAIProvider implements IAIProvider {
   constructor(tier: TierName) {
     this.tier = tier;
     this.model = MODEL_REGISTRY.openai[tier];
-    this.client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const apiKey = process.env.OPENAI_API_KEY ?? process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+    const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+    this.client = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
   }
 
-  isAvailable(): boolean { return !!process.env.OPENAI_API_KEY; }
+  isAvailable(): boolean {
+    return !!(process.env.OPENAI_API_KEY ?? process.env.AI_INTEGRATIONS_OPENAI_API_KEY);
+  }
 
   estimateCost(inputTokens: number, outputTokens: number): number {
     const costs = COST_REGISTRY.openai[this.tier];

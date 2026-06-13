@@ -50,8 +50,11 @@ function checkPrereqs(): boolean {
   const missing: string[] = [];
   if (!process.env.DATABASE_URL) missing.push('DATABASE_URL');
   // REDIS_URL is optional — ConversationStore falls back to PostgreSQL when absent
-  if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY && !process.env.GOOGLE_API_KEY) {
-    missing.push('ANTHROPIC_API_KEY (or OPENAI_API_KEY / GOOGLE_API_KEY)');
+  const hasAnyAIKey = process.env.ANTHROPIC_API_KEY || process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY ||
+    process.env.OPENAI_API_KEY || process.env.AI_INTEGRATIONS_OPENAI_API_KEY ||
+    process.env.GOOGLE_API_KEY || process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+  if (!hasAnyAIKey) {
+    missing.push('ANTHROPIC_API_KEY / AI_INTEGRATIONS_ANTHROPIC_API_KEY (or OpenAI / Google equivalent)');
   }
   if (!process.env.GITHUB_TOKEN) missing.push('GITHUB_TOKEN');
   if (!process.env.GITHUB_REPO) missing.push('GITHUB_REPO (e.g. owner/repo)');

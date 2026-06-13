@@ -12,10 +12,13 @@ export class GoogleProvider implements IAIProvider {
   constructor(tier: TierName) {
     this.tier = tier;
     this.model = MODEL_REGISTRY.google[tier];
-    this.genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY ?? '');
+    const apiKey = process.env.GOOGLE_API_KEY ?? process.env.AI_INTEGRATIONS_GEMINI_API_KEY ?? '';
+    this.genAI = new GoogleGenerativeAI(apiKey);
   }
 
-  isAvailable(): boolean { return !!process.env.GOOGLE_API_KEY; }
+  isAvailable(): boolean {
+    return !!(process.env.GOOGLE_API_KEY ?? process.env.AI_INTEGRATIONS_GEMINI_API_KEY);
+  }
 
   estimateCost(inputTokens: number, outputTokens: number): number {
     const costs = COST_REGISTRY.google[this.tier];

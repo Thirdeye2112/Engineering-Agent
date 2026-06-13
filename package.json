@@ -12,7 +12,8 @@
     "pilot": "pnpm --filter @consensus/pilot pilot",
     "pilot:auto": "pnpm --filter @consensus/pilot pilot:auto",
     "suite": "pnpm --filter @consensus/pilot suite",
-    "suite:auto": "pnpm --filter @consensus/pilot suite:auto"
+    "suite:auto": "pnpm --filter @consensus/pilot suite:auto",
+    "sync-outcomes": "pnpm --filter @consensus/pilot sync-outcomes"
   },
   "engines": { "node": ">=20" },
   "pnpm": {

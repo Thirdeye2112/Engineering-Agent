@@ -93,6 +93,7 @@ export class RetryRunner {
       failureReason,
       failureDetail,
       retryCount,
+      outcome: null,
     };
   }
 

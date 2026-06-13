@@ -8,7 +8,8 @@
     "pilot:auto": "tsx src/run-pilot.ts --auto-approve",
     "suite": "tsx src/run-suite.ts",
     "suite:auto": "tsx src/run-suite.ts --auto-approve",
-    "test": "node --import tsx/esm --test src/__tests__/pilot.test.ts src/__tests__/phase8.test.ts"
+    "sync-outcomes": "tsx src/sync-outcomes.ts",
+    "test": "node --import tsx/esm --test src/__tests__/pilot.test.ts src/__tests__/phase8.test.ts src/__tests__/milestone1.test.ts"
   },
   "dependencies": {
     "@consensus/agent-manager": "workspace:*",

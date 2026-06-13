@@ -60,6 +60,7 @@ function makeRunRecord(overrides: Partial<PilotRunRecord> = {}): PilotRunRecord 
     failureReason: null,
     failureDetail: null,
     retryCount: 0,
+  outcome: null,
     ...overrides,
   };
 }

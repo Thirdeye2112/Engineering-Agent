@@ -23,7 +23,7 @@ import { PILOT_TASKS } from './task-suite.js';
 import type { PilotTask } from './types.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURE_MASTER = path.resolve(__dirname, '../../fixture');
+const FIXTURE_MASTER = path.resolve(__dirname, '../fixture');
 
 const AUTO_APPROVE = process.argv.includes('--auto-approve');
 const PROVIDER = (process.env.PILOT_PROVIDER ?? 'anthropic') as ProviderName;
@@ -44,7 +44,7 @@ function cloneFixture(taskId: string): string {
 function checkPrereqs(): boolean {
   const missing: string[] = [];
   if (!process.env.DATABASE_URL) missing.push('DATABASE_URL');
-  if (!process.env.REDIS_URL && !process.env.UPSTASH_REDIS_REST_URL) missing.push('REDIS_URL');
+  // REDIS_URL is optional — ConversationStore falls back to PostgreSQL when absent
   if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY && !process.env.GOOGLE_API_KEY) {
     missing.push('ANTHROPIC_API_KEY (or OPENAI_API_KEY / GOOGLE_API_KEY)');
   }

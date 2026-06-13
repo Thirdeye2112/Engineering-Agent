@@ -2,7 +2,7 @@ import { pgTable, uuid, text, jsonb, timestamp } from 'drizzle-orm/pg-core';
 
 export const permissionRules = pgTable('permission_rules', {
   id: uuid('id').primaryKey().defaultRandom(),
-  projectId: uuid('project_id').notNull(),
+  projectId: text('project_id').notNull(),
   agentRole: text('agent_role').notNull(),
   tool: text('tool').notNull(),
   operations: jsonb('operations').notNull(),
@@ -13,7 +13,7 @@ export const permissionRules = pgTable('permission_rules', {
 
 export const permissionRequests = pgTable('permission_requests', {
   id: uuid('id').primaryKey().defaultRandom(),
-  projectId: uuid('project_id').notNull(),
+  projectId: text('project_id').notNull(),
   agentRole: text('agent_role').notNull(),
   tool: text('tool').notNull(),
   operation: text('operation').notNull(),

@@ -168,7 +168,7 @@ class TestablePermissionEngine {
       .from({ _tableName: 'permission_rules' })
       .where({ projectId: context.projectId });
 
-    for (const rule of rules) {
+    for (const rule of rules as MockRule[]) {
       const roleMatch = rule.agentRole === '*' || rule.agentRole === agentRole;
       const toolMatch = rule.tool === '*' || rule.tool === tool;
       const ops = rule.operations as string[] | string;

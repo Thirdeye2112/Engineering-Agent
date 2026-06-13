@@ -23,7 +23,6 @@ export default function ProjectView() {
           const ev = e as { type: string; [key: string]: unknown };
           setEvents(prev => [...prev, ev]);
           if (ev.type === 'deliberation_complete') {
-            // Refresh project record to get final report
             fetchProject(id).then(setProject).catch(() => {});
           }
         });
@@ -34,17 +33,17 @@ export default function ProjectView() {
     return () => { wsRef.current?.close(); };
   }, [id]);
 
-  // Poll for completion if status is running and WS already closed
+  // Poll every 3s while running (handles cases where WS missed events)
   useEffect(() => {
-    if (!project || project.status !== 'running') return;
+    if (!id || !project || project.status !== 'running') return;
     const interval = setInterval(() => {
-      fetchProject(project.id).then(p => {
+      fetchProject(id).then(p => {
         setProject(p);
         if (p.status !== 'running') clearInterval(interval);
       }).catch(() => {});
     }, 3000);
     return () => clearInterval(interval);
-  }, [project?.status]);
+  }, [id, project?.status]);
 
   if (loading) {
     return <div style={{ textAlign: 'center', padding: 60 }}><span className="spinner" /></div>;
@@ -66,21 +65,15 @@ export default function ProjectView() {
         </div>
       </div>
 
-      {/* Live event stream while running */}
       {(project.status === 'running' || events.length > 0) && (
         <div style={{ marginBottom: 28 }}>
           <div className="section-title">Live events</div>
-          <EventStream events={events} />
+          <EventStream events={events as Array<{ type: string }>} />
         </div>
       )}
 
-      {/* Final report */}
-      {project.report && (
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        <ReportView report={project.report as any} />
-      )}
+      {project.report && <ReportView report={project.report} />}
 
-      {/* Error state */}
       {project.status === 'error' && !project.report && (
         <div className="card" style={{ borderColor: 'var(--red)', textAlign: 'center', padding: 40 }}>
           <p style={{ color: 'var(--red)', fontWeight: 600, marginBottom: 8 }}>Project failed</p>

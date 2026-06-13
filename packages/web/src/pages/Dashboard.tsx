@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchProjects, type Project } from '../api';
 import ProjectForm from '../components/ProjectForm';
@@ -18,14 +18,14 @@ export default function Dashboard() {
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  function reload() {
+  const reload = useCallback(() => {
     fetchProjects()
       .then(p => setProjects([...p].reverse()))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }
+  }, []);
 
-  useEffect(() => { reload(); }, []);
+  useEffect(() => { reload(); }, [reload]);
 
   return (
     <div>
@@ -47,7 +47,6 @@ export default function Dashboard() {
       )}
 
       <div className="section-title">Recent projects</div>
-
       {loading ? (
         <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
           <span className="spinner" />

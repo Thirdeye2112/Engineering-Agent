@@ -1,3 +1,5 @@
+import type { Report } from './components/ReportView';
+
 const BASE = '/api';
 
 export interface Project {
@@ -6,7 +8,7 @@ export interface Project {
   mode: string;
   status: string;
   config: unknown;
-  report: unknown;
+  report: Report | null;
   createdAt: string;
   completedAt: string | null;
 }

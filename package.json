@@ -1,0 +1,13 @@
+{
+  "name": "consensus-ai",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev": "pnpm --filter api-server dev",
+    "build": "pnpm -r build",
+    "db:push": "pnpm --filter @consensus/db db:push",
+    "db:generate": "pnpm --filter @consensus/db db:generate"
+  },
+  "engines": { "node": ">=20" }
+}

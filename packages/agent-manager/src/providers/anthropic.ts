@@ -38,7 +38,7 @@ export class AnthropicProvider implements IAIProvider {
 
     const resp = await withRetry(() => this.client.messages.create({
       model: this.model,
-      max_tokens: req.maxTokens ?? 4096,
+      max_tokens: req.maxTokens ?? 8192,
       system: systemMsg?.content,
       messages: nonSystemMessages.map(m => ({
         role: m.role as 'user' | 'assistant',

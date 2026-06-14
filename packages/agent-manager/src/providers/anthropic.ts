@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { IAIProvider, SendMessageRequest, SendMessageResponse } from '../provider-interface.js';
 import { MODEL_REGISTRY, COST_REGISTRY } from '@consensus/shared-types';
 import type { ProviderName, TierName } from '@consensus/shared-types';
+import { withRetry } from '../batch-retry.js';
 
 export class AnthropicProvider implements IAIProvider {
   readonly provider: ProviderName = 'anthropic';
@@ -35,7 +36,7 @@ export class AnthropicProvider implements IAIProvider {
     const systemMsg = req.messages.find(m => m.role === 'system');
     const nonSystemMessages = req.messages.filter(m => m.role !== 'system');
 
-    const resp = await this.client.messages.create({
+    const resp = await withRetry(() => this.client.messages.create({
       model: this.model,
       max_tokens: req.maxTokens ?? 4096,
       system: systemMsg?.content,
@@ -43,7 +44,7 @@ export class AnthropicProvider implements IAIProvider {
         role: m.role as 'user' | 'assistant',
         content: m.content,
       })),
-    });
+    }));
 
     const content = resp.content.filter(b => b.type === 'text').map(b => (b as any).text).join('');
     const inputTokens = resp.usage.input_tokens;

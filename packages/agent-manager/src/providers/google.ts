@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { withRetry } from '../batch-retry.js';
 import type { IAIProvider, SendMessageRequest, SendMessageResponse } from '../provider-interface.js';
 import { MODEL_REGISTRY, COST_REGISTRY } from '@consensus/shared-types';
 import type { ProviderName, TierName } from '@consensus/shared-types';
@@ -46,7 +47,7 @@ export class GoogleProvider implements IAIProvider {
       systemInstruction: systemMsg?.content,
     });
 
-    const result = await chat.sendMessage(lastMsg);
+    const result = await withRetry(() => chat.sendMessage(lastMsg));
     const content = result.response.text();
     const usage = result.response.usageMetadata;
     const inputTokens = usage?.promptTokenCount ?? 0;

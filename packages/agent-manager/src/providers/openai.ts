@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { withRetry } from '../batch-retry.js';
 import type { IAIProvider, SendMessageRequest, SendMessageResponse } from '../provider-interface.js';
 import { MODEL_REGISTRY, COST_REGISTRY } from '@consensus/shared-types';
 import type { ProviderName, TierName } from '@consensus/shared-types';
@@ -35,12 +36,12 @@ export class OpenAIProvider implements IAIProvider {
       role: m.role as 'system' | 'user' | 'assistant',
       content: m.content,
     }));
-    const resp = await this.client.chat.completions.create({
+    const resp = await withRetry(() => this.client.chat.completions.create({
       model: this.model,
       messages,
       max_tokens: req.maxTokens ?? 4096,
       temperature: req.temperature ?? 0.7,
-    });
+    }));
     const content = resp.choices[0]?.message?.content ?? '';
     const inputTokens = resp.usage?.prompt_tokens ?? 0;
     const outputTokens = resp.usage?.completion_tokens ?? 0;

@@ -2,10 +2,8 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { getDb, projects, subtasks, permissionRequests } from '@consensus/db';
-const __dirname = dirname(fileURLToPath(import.meta.url));
 import { projectMemory } from '@consensus/memory';
 import { permissionEngine } from '@consensus/permissions';
 import { conversationStore } from '@consensus/agent-manager';
@@ -23,7 +21,7 @@ import { auditLog } from '@consensus/audit-log';
 
 const app = express();
 app.use(express.json());
-app.use(express.static(join(__dirname, '../public')));
+app.use(express.static(join(process.cwd(), 'public')));
 
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer });

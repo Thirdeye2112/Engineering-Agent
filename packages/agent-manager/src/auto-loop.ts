@@ -182,6 +182,21 @@ export class AutoLoop {
                 sandboxRoot,
                 useMemory: true,
                 runTests: true,
+                onEvent: (ev) => {
+                  if (ev.type === 'tool_called') {
+                    console.log(`    [tool] ${ev.tool}.${ev.operation}`);
+                  } else if (ev.type === 'tool_result') {
+                    if (!ev.success) console.log(`    [tool] ✗ ${ev.tool} failed`);
+                  } else if (ev.type === 'code_review_complete') {
+                    console.log(`    [review] verdict=${ev.verdict} risk=${ev.riskLevel}`);
+                  } else if (ev.type === 'pr_opened') {
+                    console.log(`    [pr] opened ${ev.prUrl}`);
+                  } else if (ev.type === 'workflow_error') {
+                    console.log(`    [error] ${ev.error}`);
+                  } else if (ev.type === 'security_review_complete' && ev.blockingIssues.length > 0) {
+                    console.log(`    [security] blocking: ${ev.blockingIssues.join(', ')}`);
+                  }
+                },
               });
               return workflow.run();
             })());
@@ -194,7 +209,9 @@ export class AutoLoop {
           this.prUrls.push(report.prUrl);
           onEvent?.({ type: 'task_complete', task: selectedTask, prUrl: report.prUrl, iteration });
         } else {
-          const reason = report.blockingObjections?.[0] ?? 'No PR opened';
+          const objections = report.blockingObjections ?? [];
+          const reason = objections[0] ?? 'No PR opened';
+          if (objections.length > 1) console.log(`    [blockers] ${objections.slice(1).join(' | ')}`);
           this.failedTasks.push(selectedTask.title);
           onEvent?.({ type: 'task_failed', task: selectedTask, reason, iteration });
         }

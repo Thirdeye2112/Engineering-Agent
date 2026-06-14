@@ -10,13 +10,13 @@ import { PlannerAgent, type PlannedTask } from './planner-agent.js';
 import { DebateEngine } from './debate-engine.js';
 import { PRWorkflow } from './pr-workflow.js';
 import { createProvider } from './provider-factory.js';
-import { analyzeRepo, formatRepoIntelligenceForPrompt } from '@consensus/memory';
+import { analyzeRepo, formatRepoIntelligenceForPrompt, type RepoIntelligence } from '@consensus/memory';
 import type { IAIProvider } from './provider-interface.js';
 import type { ProviderName, TierName } from '@consensus/shared-types';
 
 export interface AutoLoopConfig {
   /** How many tasks to complete before stopping. Default: unlimited (run forever). */
-  maxTasks?: number;
+  maxTasks?: number | null;
   /** Target repo full name e.g. "owner/repo" */
   repoFullName: string;
   /** Local checkout root for repo intelligence */
@@ -29,6 +29,12 @@ export interface AutoLoopConfig {
   /** Pause between tasks in ms. Default: 5000. */
   pauseMs?: number;
   onEvent?: (event: AutoLoopEvent) => void;
+  /** Injectable for testing — overrides @consensus/memory analyzeRepo */
+  analyzeRepo?: (root: string) => RepoIntelligence;
+  /** Injectable for testing — overrides @consensus/memory formatRepoIntelligenceForPrompt */
+  formatRepoIntelligenceForPrompt?: (intel: RepoIntelligence) => string;
+  /** Injectable for testing — replaces the full PRWorkflow execution */
+  executeTask?: (task: PlannedTask) => Promise<{ prUrl?: string; blockingObjections?: string[] }>;
 }
 
 export type AutoLoopEvent =
@@ -71,6 +77,9 @@ export class AutoLoop {
       fastTier = 'fast',
       pauseMs = 5000,
       onEvent,
+      analyzeRepo: analyzeRepoFn,
+      formatRepoIntelligenceForPrompt: formatFn,
+      executeTask: executeTaskFn,
     } = this.config;
 
     onEvent?.({ type: 'loop_started', maxTasks });
@@ -88,8 +97,8 @@ export class AutoLoop {
       // Build repo description from intelligence
       let repoDescription = `Repository: ${repoFullName}`;
       try {
-        const intel = analyzeRepo(sandboxRoot);
-        repoDescription = formatRepoIntelligenceForPrompt(intel);
+        const intel = (analyzeRepoFn ?? analyzeRepo)(sandboxRoot);
+        repoDescription = (formatFn ?? formatRepoIntelligenceForPrompt)(intel);
       } catch { /* fall back to repo name */ }
 
       // Step 1: Planner proposes tasks
@@ -144,20 +153,23 @@ export class AutoLoop {
 
       // Step 3: PRWorkflow implements the selected task
       try {
-        const workflow = new PRWorkflow({
-          projectId: `auto-loop:${selectedTask.id}:${Date.now()}`,
-          task: `${selectedTask.title}\n\n${selectedTask.description}`,
-          repoFullName,
-          agents: [
-            { provider: primaryProvider, role: 'implementation_agent' as never },
-            { provider: fastProvider, role: 'critic' as never },
-          ],
-          sandboxRoot,
-          useMemory: true,
-          runTests: true,
-        });
-
-        const report = await workflow.run();
+        const report = await (executeTaskFn
+          ? executeTaskFn(selectedTask)
+          : (async () => {
+              const workflow = new PRWorkflow({
+                projectId: `auto-loop:${selectedTask.id}:${Date.now()}`,
+                task: `${selectedTask.title}\n\n${selectedTask.description}`,
+                repoFullName,
+                agents: [
+                  { provider: primaryProvider, role: 'implementation_agent' as never },
+                  { provider: fastProvider, role: 'critic' as never },
+                ],
+                sandboxRoot,
+                useMemory: true,
+                runTests: true,
+              });
+              return workflow.run();
+            })());
 
         if (report.prUrl) {
           this.completedTasks.push(selectedTask.title);

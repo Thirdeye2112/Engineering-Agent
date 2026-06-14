@@ -15,9 +15,13 @@ export function truncate(str: string, maxLen: number): string {
   return str.slice(0, maxLen) + '...';
 }
 
-/** Converts a string to camelCase. */
+/**
+ * Converts a string to camelCase.
+ * The first word is always lowercased; subsequent words are capitalized.
+ */
 export function camelCase(str: string): string {
-  return str
-    .toLowerCase()
-    .replace(/[^a-zA-Z0-9]+(.)/g, (_, c: string) => c.toUpperCase());
+  const words = str.trim().split(/[^a-zA-Z0-9]+/);
+  return words
+    .map((word, i) => (i === 0 ? word.toLowerCase() : capitalize(word.toLowerCase())))
+    .join('');
 }

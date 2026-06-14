@@ -1,21 +1,23 @@
-run = "pnpm self-direct"
-entrypoint = "packages/pilot/src/self-direct.ts"
+# Replit runs the lightweight API server (approval UI + dashboard).
+# The heavy agent loop runs on your laptop: pnpm self-direct --tasks 5
+run = "pnpm --filter @consensus/api-server start"
 
 [nix]
 channel = "stable-24_05"
 
 [deployment]
-run = ["sh", "-c", "pnpm self-direct"]
+run = ["sh", "-c", "pnpm --filter @consensus/api-server start"]
 deploymentTarget = "cloudrun"
 
 [env]
 # Replit injects these automatically when the Anthropic AI integration is enabled:
 #   AI_INTEGRATIONS_ANTHROPIC_API_KEY
 #   AI_INTEGRATIONS_ANTHROPIC_BASE_URL
-# The following must be set as Replit Secrets (not here):
-#   DATABASE_URL        — your Neon/Supabase/Postgres connection string
-#   GITHUB_TOKEN        — fine-grained token with repo read+write on GITHUB_REPO
-#   GITHUB_REPO         — e.g. "thirdeye2112/engineering-agent"
+#
+# Set these as Replit Secrets (sidebar → Secrets tab):
+#   DATABASE_URL   — your Neon connection string (shared with your laptop)
+#   GITHUB_TOKEN   — fine-grained PAT with Contents + Pull Requests write
+#   GITHUB_REPO    — e.g. "thirdeye2112/engineering-agent"
 
 [[ports]]
 localPort = 3000

@@ -49,10 +49,10 @@ export class GitHubTool implements ITool {
     get_repo:      'auto_allow',
     list_files:    'auto_allow',
     read_file:     'auto_allow',
-    create_branch: 'approval_required',
-    commit_file:   'approval_required',
-    batch_commit:  'approval_required',  // one approval for all files in the batch
-    open_pr:       'approval_required',
+    create_branch: 'auto_allow',
+    commit_file:   'auto_allow',
+    batch_commit:  'auto_allow',
+    open_pr:       'auto_allow',
   };
 
   constructor(private readonly getToken: () => string | undefined = () => process.env.GITHUB_TOKEN) {}

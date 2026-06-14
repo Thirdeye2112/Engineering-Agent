@@ -155,7 +155,20 @@ export class Agent {
 
     // First call — start implementation
     let raw = await this.call(systemPrompt, userMessage);
-    let response = AgentResponseSchema.parse(parseJSON<unknown>(raw, 'implementation response'));
+    // Normalize common LLM abbreviations before parsing
+    const normalizeToolCalls = (obj: unknown): unknown => {
+      if (typeof obj !== 'object' || obj === null) return obj;
+      if (Array.isArray(obj)) return obj.map(normalizeToolCalls);
+      const o = obj as Record<string, unknown>;
+      // "op" → "operation" alias
+      if ('op' in o && !('operation' in o)) o.operation = o.op;
+      return Object.fromEntries(Object.entries(o).map(([k, v]) => [k, normalizeToolCalls(v)]));
+    };
+    const parseAndNormalize = (r: string, label: string) => {
+      const parsed = parseJSON<unknown>(r, label);
+      return AgentResponseSchema.parse(normalizeToolCalls(parsed));
+    };
+    let response = parseAndNormalize(raw, 'implementation response');
 
     const executeStep = async (iter: number): Promise<ImplementationStep> => {
       const toolResults: ImplementationStep['toolResults'] = [];
@@ -193,7 +206,7 @@ export class Agent {
         })),
       );
       raw = await this.call(systemPrompt, resultMsg);
-      response = AgentResponseSchema.parse(parseJSON<unknown>(raw, 'implementation response'));
+      response = parseAndNormalize(raw, 'implementation response');
     }
 
     // If the loop hit maxIterations and the final response still has tool calls

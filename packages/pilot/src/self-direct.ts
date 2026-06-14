@@ -32,7 +32,10 @@ const spendArg = args.indexOf('--max-spend');
 const maxSpendUsd = spendArg !== -1 ? parseFloat(args[spendArg + 1] ?? '5') : undefined;
 const dryRun = args.includes('--dry');
 const GITHUB_REPO = process.env.GITHUB_REPO ?? '';
+// Sandbox is the fixture mini-repo for safe file operations.
+// REPO_ROOT is passed to the planner so it describes the real codebase.
 const SANDBOX_ROOT = path.resolve(__dirname, '../fixture');
+const REPO_ROOT = process.env.REPO_ROOT ?? path.resolve(__dirname, '../../../');
 
 function checkPrereqs(): boolean {
   const missing: string[] = [];
@@ -98,6 +101,7 @@ async function main() {
     maxSpendUsd,
     repoFullName: GITHUB_REPO,
     sandboxRoot: SANDBOX_ROOT,
+    repoRoot: REPO_ROOT,
     onEvent: (ev) => {
       const line = formatEvent(ev);
       if (line) console.log(line);

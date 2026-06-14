@@ -97,7 +97,7 @@ export class Agent {
       { role: 'user' as const, content: userMessage },
     ];
 
-    const resp = await this.config.provider.sendMessage({ messages, maxTokens: 2048 });
+    const resp = await this.config.provider.sendMessage({ messages, maxTokens: 4096 });
     this.totalCostUsd += resp.costUsd;
 
     await conversationStore.appendExchange(

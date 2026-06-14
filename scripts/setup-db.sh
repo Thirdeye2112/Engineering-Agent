@@ -10,10 +10,10 @@ if [ -z "$DATABASE_URL" ]; then
   exit 1
 fi
 
-echo "▶  Applying schema..."
-pnpm --filter @consensus/db exec drizzle-kit push || {
-  echo "drizzle-kit push failed — applying migrations manually via psql"
-  psql "$DATABASE_URL" -f packages/db/migrations/001_approval_binding.sql
-}
+echo "▶  Creating tables..."
+psql "$DATABASE_URL" -f packages/db/migrations/000_full_schema.sql
+
+echo "▶  Applying latest migration..."
+psql "$DATABASE_URL" -f packages/db/migrations/001_approval_binding.sql
 
 echo "✅  Database ready."

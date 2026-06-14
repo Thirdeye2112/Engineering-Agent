@@ -20,7 +20,7 @@ function buildToolsSection(tools: ITool[]): string {
 
 const AGENT_RESPONSE_SCHEMA = `{
   "status": "in_progress" | "complete" | "blocked",
-  "narrative": "string — what you did or are doing",
+  "narrative": "string — what you did or are doing (one sentence, no code)",
   "toolCalls": [
     { "tool": "filesystem", "operation": "read_file", "path": "src/index.ts" }
   ],
@@ -28,7 +28,9 @@ const AGENT_RESPONSE_SCHEMA = `{
   "prNumber": 42,
   "filesModified": ["path/to/file.ts"],
   "blockingIssues": ["issue1 (when status=blocked)"]
-}`;
+}
+
+IMPORTANT: Every item in toolCalls MUST have both "tool" and "operation" fields. Keep "narrative" short — do NOT put file contents or code in the narrative field.`;
 
 export interface ImplementationContext {
   memoryContext?: string;

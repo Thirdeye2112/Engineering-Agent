@@ -65,7 +65,7 @@ export type DeliberationReport = z.infer<typeof DeliberationReportSchema>;
 
 export const ToolCallSchema = z.object({
   tool: z.string(),
-  operation: z.string(),
+  operation: z.string().optional().default('execute'),
   // All other fields are tool-specific
 }).passthrough();
 export type ToolCall = z.infer<typeof ToolCallSchema>;

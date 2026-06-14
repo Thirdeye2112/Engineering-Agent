@@ -21,3 +21,8 @@ export function camelCase(str: string): string {
     .toLowerCase()
     .replace(/[^a-zA-Z0-9]+(.)/g, (_, c: string) => c.toUpperCase());
 }
+
+/** Returns true if val is a non-empty, non-whitespace-only string. */
+export function isNonEmptyString(val: unknown): val is string {
+  return typeof val === 'string' && val.trim().length > 0;
+}

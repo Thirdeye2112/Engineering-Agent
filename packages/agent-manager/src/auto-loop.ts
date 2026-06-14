@@ -176,8 +176,8 @@ export class AutoLoop {
                 task: `${selectedTask.title}\n\n${selectedTask.description}`,
                 repoFullName,
                 agents: [
-                  { provider: primaryProvider, role: 'implementation_agent' as never },
-                  { provider: fastProvider, role: 'critic' as never },
+                  { provider: primaryProvider, role: 'architect' },
+                  { provider: fastProvider, role: 'devil_advocate' },
                 ],
                 sandboxRoot,
                 useMemory: true,

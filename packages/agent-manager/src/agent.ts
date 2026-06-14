@@ -1,6 +1,6 @@
 import type { IAIProvider } from './provider-interface.js';
 import { conversationStore } from './conversation-store.js';
-import { buildProposalPrompt, buildCritiquePrompt, buildRevisionPrompt, buildVotePrompt, buildImplementationPrompt, buildToolResultMessage, buildSecurityReviewPrompt } from './prompts.js';
+import { buildProposalPrompt, buildCritiquePrompt, buildRevisionPrompt, buildVotePrompt, buildImplementationPrompt, buildToolResultMessage, buildSecurityReviewPrompt, type ImplementationContext } from './prompts.js';
 import { AgentProposalSchema, AgentCritiqueSchema, VoteSchema, AgentResponseSchema, SecurityReviewSchema } from '@consensus/shared-types';
 import type { AgentRole, AgentProposal, AgentCritique, Vote, AgentResponse, ImplementationStep, SecurityReview } from '@consensus/shared-types';
 import { createProvider } from './provider-factory.js';
@@ -145,12 +145,13 @@ export class Agent {
     implementationPlan: string,
     tools: ITool[],
     maxIterations = 10,
+    ctx?: ImplementationContext,
   ): Promise<{ steps: ImplementationStep[]; finalResponse: AgentResponse }> {
     const toolMap = new Map(tools.map(t => [t.name, t]));
     const steps: ImplementationStep[] = [];
 
     const { systemPrompt, userMessage } = buildImplementationPrompt(
-      this.config.role, this.config.task, implementationPlan, tools,
+      this.config.role, this.config.task, implementationPlan, tools, ctx,
     );
 
     // First call — start implementation

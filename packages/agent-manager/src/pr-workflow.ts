@@ -92,7 +92,7 @@ export class PRWorkflow {
       console.warn('[repo-intelligence] analysis failed:', err);
     }
 
-    const implementationCtx = { memoryContext, repoIntelligenceContext };
+    const implementationCtx = { memoryContext, repoIntelligenceContext, repoFullName };
 
     // ── Step 1: Debate round to agree on implementation plan ─────────────────
     onEvent?.({ type: 'debate_started' });
@@ -134,7 +134,7 @@ export class PRWorkflow {
     });
     await implementor.init();
 
-    const { steps, finalResponse } = await implementor.implement(implementationPlan, tools);
+    const { steps, finalResponse } = await implementor.implement(implementationPlan, tools, 10, implementationCtx);
     totalCostUsd += implementor.costUsd;
 
     for (const step of steps) {
@@ -144,8 +144,25 @@ export class PRWorkflow {
       }
     }
 
-    const prUrl = finalResponse.prUrl;
-    const prNumber = finalResponse.prNumber;
+    // Extract prUrl from actual successful github.open_pr tool results (ground truth),
+    // falling back to the agent's claimed prUrl only if no tool result found.
+    let prUrl: string | undefined;
+    let prNumber: number | undefined;
+    for (const step of steps) {
+      for (let i = 0; i < step.toolCalls.length; i++) {
+        const tc = step.toolCalls[i];
+        const tr = step.toolResults[i];
+        if (tc.tool === 'github' && tc.operation === 'open_pr' && tr?.success) {
+          const out = tr.output as Record<string, unknown> | null;
+          prUrl = (out?.html_url ?? out?.url) as string | undefined;
+          prNumber = out?.number as number | undefined;
+        }
+      }
+    }
+    // Fall back to agent-reported values if the tool result didn't capture the URL
+    prUrl ??= finalResponse.prUrl;
+    prNumber ??= finalResponse.prNumber;
+
     const filesModified = finalResponse.filesModified ?? [];
     const implementationBlockers = finalResponse.blockingIssues ?? [];
 

@@ -35,6 +35,7 @@ IMPORTANT: Every item in toolCalls MUST have both "tool" and "operation" fields.
 export interface ImplementationContext {
   memoryContext?: string;
   repoIntelligenceContext?: string;
+  repoFullName?: string;
 }
 
 export function buildImplementationPrompt(
@@ -48,33 +49,47 @@ export function buildImplementationPrompt(
   const memorySections = [ctx?.repoIntelligenceContext, ctx?.memoryContext]
     .filter(Boolean)
     .join('\n\n');
+
+  const [repoOwner, repoName] = (ctx?.repoFullName ?? '/').split('/');
+  const repoSection = ctx?.repoFullName
+    ? `\nGitHub repo: owner="${repoOwner}" repo="${repoName}" (use these exact values in every github tool call)\n`
+    : '';
+
   return {
     systemPrompt: `${ROLE_DESCRIPTIONS[role]}
 
 You are implementing a plan using real tools. Work iteratively:
-1. Read relevant files to understand the current code
-2. Write or modify files to implement the change
-3. Verify with tsc/eslint before committing
-4. Create a branch, commit the files, open a PR
+1. Use github.read_file or github.list_files to understand the current code
+2. Use github.create_branch to create a feature branch (never commit to main/master)
+3. Use github.batch_commit to commit all changed files in one call
+4. Use github.open_pr to open the pull request
+5. Set status="complete" with prUrl and prNumber once the PR is open
 
 Available tools:
 ${toolList}
+
+GitHub tool call examples:
+- List files:   {"tool":"github","operation":"list_files","owner":"${repoOwner}","repo":"${repoName}","path":""}
+- Read file:    {"tool":"github","operation":"read_file","owner":"${repoOwner}","repo":"${repoName}","path":"src/index.ts"}
+- Create branch:{"tool":"github","operation":"create_branch","owner":"${repoOwner}","repo":"${repoName}","branch":"feat/my-feature","baseBranch":"main"}
+- Batch commit: {"tool":"github","operation":"batch_commit","owner":"${repoOwner}","repo":"${repoName}","branch":"feat/my-feature","message":"feat: add X","files":[{"path":"src/foo.ts","content":"..."}]}
+- Open PR:      {"tool":"github","operation":"open_pr","owner":"${repoOwner}","repo":"${repoName}","title":"feat: add X","body":"## Summary\\n- Added X","head":"feat/my-feature","base":"main"}
 
 Respond with ONLY valid JSON — no prose, no fences:
 ${AGENT_RESPONSE_SCHEMA}
 
 Rules:
+- Use ONLY the github tool (not filesystem or terminal) — files live in GitHub
 - Set status="in_progress" with toolCalls when you need to use tools
-- Set status="complete" when the PR is opened (include prUrl, prNumber, filesModified)
+- Set status="complete" ONLY after github.open_pr succeeds (include prUrl, prNumber, filesModified)
 - Set status="blocked" if you hit an unresolvable issue (include blockingIssues)
-- One round of toolCalls per response — wait for results before the next round
-- ONLY call tools from the Available tools list above`,
+- One round of toolCalls per response — wait for results before the next round`,
     userMessage: `Task: ${task}
-
+${repoSection}
 Agreed implementation plan:
 ${implementationPlan}
 ${memorySections ? `\n${memorySections}\n` : ''}
-Start by reading the relevant files. Then implement the plan step by step.`,
+Start by listing or reading the relevant files. Then implement the plan step by step, ending with github.open_pr.`,
   };
 }
 

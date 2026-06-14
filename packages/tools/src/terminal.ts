@@ -14,7 +14,8 @@ export class TerminalTool implements ITool {
   readonly description = `Run permitted commands. Allowed: ${DEFAULT_ALLOWLIST.join(', ')}. Uses spawn (no shell injection).`;
   readonly permissions: ToolPermission[] = ['write'];
   readonly gates: Record<string, GateType> = {
-    execute: 'approval_required',
+    execute: 'auto_allow',
+    run: 'auto_allow',
   };
 
   private allowlist: string[];

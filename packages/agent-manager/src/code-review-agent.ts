@@ -86,7 +86,7 @@ export class CodeReviewAgent {
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userMessage },
       ],
-      maxTokens: 1024,
+      maxTokens: 4096,
     });
 
     const parsed = parseJSON<unknown>(resp.content);

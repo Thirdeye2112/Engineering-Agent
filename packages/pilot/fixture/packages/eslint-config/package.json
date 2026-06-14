@@ -1,0 +1,44 @@
+{
+  "name": "@pilot-utils/eslint-config",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shared ESLint configuration for the pilot-utils monorepo",
+  "type": "module",
+  "main": "./base.js",
+  "exports": {
+    ".": "./base.js",
+    "./base": "./base.js",
+    "./typescript": "./typescript.js",
+    "./test": "./test.js"
+  },
+  "files": [
+    "base.js",
+    "typescript.js",
+    "test.js"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "echo 'No build step required for JS config package'",
+    "dev": "echo 'No dev step required for JS config package'",
+    "test": "echo 'No tests for this package'",
+    "typecheck": "echo 'No typecheck step required for JS config package'",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "peerDependencies": {
+    "eslint": ">=9.0.0",
+    "typescript-eslint": ">=8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "typescript-eslint": {
+      "optional": false
+    }
+  },
+  "dependencies": {
+    "@eslint/js": "^9.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint-plugin-import": "^2.29.0",
+    "typescript-eslint": "^8.0.0"
+  }
+}

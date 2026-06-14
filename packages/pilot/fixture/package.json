@@ -1,14 +1,67 @@
 {
   "name": "pilot-utils",
   "version": "1.0.0",
+  "description": "A collection of TypeScript utility functions and ESLint rules",
   "type": "module",
+  "main": "./dist/utils.js",
+  "module": "./dist/utils.js",
+  "types": "./dist/utils.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/utils.js",
+      "types": "./dist/utils.d.ts"
+    },
+    "./array": {
+      "import": "./dist/array.js",
+      "types": "./dist/array.d.ts"
+    },
+    "./number": {
+      "import": "./dist/number.js",
+      "types": "./dist/number.d.ts"
+    },
+    "./validation": {
+      "import": "./dist/validation.js",
+      "types": "./dist/validation.d.ts"
+    },
+    "./eslint-rules": {
+      "import": "./dist/eslint-rules/index.js",
+      "types": "./dist/eslint-rules/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
   "scripts": {
-    "test": "node --import tsx/esm --test src/*.test.ts",
+    "build": "tsc --project tsconfig.json",
+    "build:all": "pnpm -r build",
+    "dev": "tsc --project tsconfig.json --watch",
+    "test": "node --import tsx/esm --test src/*.test.ts src/eslint-rules/configs/*.test.ts",
+    "test:vitest": "vitest run",
+    "test:vitest:watch": "vitest",
+    "test:vitest:coverage": "vitest run --coverage",
+    "test:all": "npm run test && npm run test:vitest",
+    "test:packages": "pnpm -r test",
     "typecheck": "tsc --noEmit",
-    "lint": "echo 'no linter configured'"
+    "typecheck:all": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "lint:all": "pnpm -r lint",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "changeset publish"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.27.0",
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "eslint": "^9.0.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.9.0",
-    "@types/node": "^22.0.0"
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^2.0.0"
   }
 }

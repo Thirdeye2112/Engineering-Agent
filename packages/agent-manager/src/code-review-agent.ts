@@ -9,16 +9,26 @@ function parseJSON<T>(raw: string): T {
     .trim();
   const objStart = cleaned.indexOf('{');
   if (objStart > 0) cleaned = cleaned.slice(objStart);
-  const end = (() => {
-    let depth = 0;
-    for (let i = 0; i < cleaned.length; i++) {
-      if (cleaned[i] === '{') depth++;
-      else if (cleaned[i] === '}') { depth--; if (depth === 0) return i; }
+
+  try { return JSON.parse(cleaned) as T; } catch { /* fall through */ }
+
+  // Walk string-aware to find the closing brace, then parse the slice
+  let depth = 0, inString = false, escape = false;
+  for (let i = 0; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+    if (escape) { escape = false; continue; }
+    if (ch === '\\' && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        try { return JSON.parse(cleaned.slice(0, i + 1)) as T; } catch { /* keep scanning */ }
+      }
     }
-    return -1;
-  })();
-  if (end !== -1) cleaned = cleaned.slice(0, end + 1);
-  return JSON.parse(cleaned) as T;
+  }
+  throw new Error(`Failed to parse code-review JSON: ${raw.slice(0, 300)}`);
 }
 
 const SYSTEM_PROMPT = `You are a code reviewer. Your job is to review proposed file changes before they are approved.

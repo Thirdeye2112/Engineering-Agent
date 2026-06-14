@@ -81,6 +81,16 @@ CREATE TABLE IF NOT EXISTS permission_requests (
   consumed        BOOLEAN NOT NULL DEFAULT FALSE
 );
 
+-- Conversation threads (agent working memory)
+CREATE TABLE IF NOT EXISTS conversation_threads (
+  id               TEXT PRIMARY KEY,
+  agent_role       TEXT NOT NULL,
+  deliberation_id  TEXT NOT NULL,
+  messages         JSONB NOT NULL DEFAULT '[]',
+  created_at       TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
 -- Memory
 CREATE TABLE IF NOT EXISTS project_memories (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),

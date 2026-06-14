@@ -27,6 +27,8 @@ export interface AutoLoopConfig {
   repoFullName: string;
   /** Local checkout root for repo intelligence */
   sandboxRoot: string;
+  /** Root of the real repo to analyze for planning (defaults to sandboxRoot) */
+  repoRoot?: string;
   /** Primary model for planning + implementation */
   provider?: ProviderName;
   tier?: TierName;
@@ -110,7 +112,7 @@ export class AutoLoop {
       // Build repo description from intelligence
       let repoDescription = `Repository: ${repoFullName}`;
       try {
-        const intel = (analyzeRepoFn ?? analyzeRepo)(sandboxRoot);
+        const intel = (analyzeRepoFn ?? analyzeRepo)(this.config.repoRoot ?? sandboxRoot);
         repoDescription = (formatFn ?? formatRepoIntelligenceForPrompt)(intel);
       } catch { /* fall back to repo name */ }
 

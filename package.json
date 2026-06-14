@@ -2,7 +2,9 @@
   "name": "consensus-ai",
   "version": "1.0.0",
   "private": true,
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "pnpm --filter api-server dev",
     "web:dev": "pnpm --filter @consensus/web dev",
@@ -13,10 +15,15 @@
     "pilot:auto": "pnpm --filter @consensus/pilot pilot:auto",
     "suite": "pnpm --filter @consensus/pilot suite",
     "suite:auto": "pnpm --filter @consensus/pilot suite:auto",
-    "sync-outcomes": "pnpm --filter @consensus/pilot sync-outcomes"
+    "sync-outcomes": "pnpm --filter @consensus/pilot sync-outcomes",
+    "self-direct": "pnpm --filter @consensus/pilot self-direct"
   },
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

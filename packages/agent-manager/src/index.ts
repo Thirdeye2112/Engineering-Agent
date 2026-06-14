@@ -13,3 +13,6 @@ export * from './pr-workflow.js';
 export * from './code-review-agent.js';
 export * from './test-plan-agent.js';
 export * from './onboarding-workflow.js';
+export * from './planner-agent.js';
+export * from './auto-loop.js';
+export * from './batch-retry.js';

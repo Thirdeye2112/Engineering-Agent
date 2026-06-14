@@ -19,7 +19,8 @@
     "@consensus/memory": "workspace:*",
     "@consensus/permissions": "workspace:*",
     "@consensus/shared-types": "workspace:*",
-    "@consensus/tools": "workspace:*"
+    "@consensus/tools": "workspace:*",
+    "dotenv": "^17.4.2"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

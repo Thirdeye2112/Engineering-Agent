@@ -1,4 +1,10 @@
 #!/usr/bin/env node
+import { config } from 'dotenv';
+import { resolve } from 'node:path';
+// Load .env from the repo root (works whether run from root or packages/pilot)
+config({ path: resolve(process.cwd(), '.env') });
+config({ path: resolve(process.cwd(), '../../.env') });
+
 /**
  * Self-directing agent loop CLI
  *

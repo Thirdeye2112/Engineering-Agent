@@ -27,37 +27,47 @@ export interface AgentConfig {
 }
 
 function parseJSON<T>(raw: string, label: string): T {
-  // Strip all markdown code fences (anywhere in the string)
+  // Strip markdown code fences
   let cleaned = raw
     .replace(/^```(?:json)?\s*/m, '')
     .replace(/\s*```\s*$/m, '')
     .trim();
 
-  // Find the outermost JSON object or array
+  // Find the first JSON object or array start
   const objStart = cleaned.indexOf('{');
   const arrStart = cleaned.indexOf('[');
   let start = -1;
   if (objStart !== -1 && (arrStart === -1 || objStart < arrStart)) start = objStart;
   else if (arrStart !== -1) start = arrStart;
-
   if (start > 0) cleaned = cleaned.slice(start);
 
-  // Find the matching closing bracket
+  // Try parsing the whole string first (happy path)
+  try { return JSON.parse(cleaned) as T; } catch { /* fall through */ }
+
+  // The response may have trailing text after the JSON. Walk forward from the
+  // start trying progressively longer substrings until one parses. This handles
+  // cases where the LLM appends prose after the closing brace.
   const opener = cleaned[0];
   const closer = opener === '{' ? '}' : ']';
   let depth = 0;
-  let end = -1;
+  let inString = false;
+  let escape = false;
   for (let i = 0; i < cleaned.length; i++) {
-    if (cleaned[i] === opener) depth++;
-    else if (cleaned[i] === closer) { depth--; if (depth === 0) { end = i; break; } }
+    const ch = cleaned[i];
+    if (escape) { escape = false; continue; }
+    if (ch === '\\' && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === opener) depth++;
+    else if (ch === closer) {
+      depth--;
+      if (depth === 0) {
+        try { return JSON.parse(cleaned.slice(0, i + 1)) as T; } catch { /* keep scanning */ }
+      }
+    }
   }
-  if (end !== -1) cleaned = cleaned.slice(0, end + 1);
 
-  try {
-    return JSON.parse(cleaned) as T;
-  } catch {
-    throw new Error(`Failed to parse ${label} JSON: ${raw.slice(0, 300)}`);
-  }
+  throw new Error(`Failed to parse ${label} JSON: ${raw.slice(0, 300)}`);
 }
 
 export class Agent {

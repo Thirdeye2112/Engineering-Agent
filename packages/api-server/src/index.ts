@@ -2,7 +2,10 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { getDb, projects, subtasks, permissionRequests } from '@consensus/db';
+const __dirname = dirname(fileURLToPath(import.meta.url));
 import { projectMemory } from '@consensus/memory';
 import { permissionEngine } from '@consensus/permissions';
 import { conversationStore } from '@consensus/agent-manager';
@@ -20,6 +23,7 @@ import { auditLog } from '@consensus/audit-log';
 
 const app = express();
 app.use(express.json());
+app.use(express.static(join(__dirname, '../public')));
 
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer });
@@ -385,6 +389,33 @@ app.post('/credentials', (req, res) => {
     }
   }
   res.json({ ok: true });
+});
+
+// Dashboard: recent audit events
+app.get('/audit', async (req, res) => {
+  try {
+    const db = getDb();
+    const limit = Math.min(parseInt(req.query.limit as string ?? '20', 10), 100);
+    const rows = await db.select().from(auditEvents).orderBy(desc(auditEvents.seq)).limit(limit);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// Dashboard: list projects (optionally filter by status)
+app.get('/projects', async (req, res) => {
+  try {
+    const db = getDb();
+    const { eq } = await import('drizzle-orm');
+    const status = req.query.status as string | undefined;
+    const rows = status
+      ? await db.select().from(projects).where(eq(projects.status, status))
+      : await db.select().from(projects).orderBy(desc(projects.createdAt)).limit(50);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
 });
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);

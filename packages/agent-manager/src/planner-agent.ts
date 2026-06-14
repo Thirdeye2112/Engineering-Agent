@@ -1,31 +1,17 @@
 import type { IAIProvider } from './provider-interface.js';
 import { withRetry } from './batch-retry.js';
 
-const SYSTEM_PROMPT = `You are a software engineering planner. Your job is to analyze a codebase and propose the most valuable next tasks to improve it.
+const SYSTEM_PROMPT = `You are a software engineering planner. Analyze the codebase description and respond with ONLY a JSON object — no explanation, no markdown, no prose before or after.
 
-Given a description of the codebase and its current state, produce exactly 3 candidate tasks ranked by value.
-
-Respond ONLY with valid JSON:
-{
-  "tasks": [
-    {
-      "id": "short-kebab-id",
-      "title": "Short title (5-8 words)",
-      "description": "What to build and why (2-3 sentences)",
-      "rationale": "Why this task is valuable right now (1 sentence)",
-      "expectedFiles": ["path/to/file.ts"],
-      "priority": "high" | "medium" | "low",
-      "estimatedComplexity": "small" | "medium" | "large"
-    }
-  ],
-  "repoSummary": "One sentence summary of the repo's current state"
-}
+Required JSON format (copy exactly, fill in values):
+{"tasks":[{"id":"kebab-id","title":"Short title","description":"What to build","rationale":"Why now","expectedFiles":["src/file.ts"],"priority":"high","estimatedComplexity":"small"},{"id":"kebab-id-2","title":"Short title 2","description":"What to build","rationale":"Why now","expectedFiles":["src/file2.ts"],"priority":"medium","estimatedComplexity":"small"},{"id":"kebab-id-3","title":"Short title 3","description":"What to build","rationale":"Why now","expectedFiles":["src/file3.ts"],"priority":"low","estimatedComplexity":"small"}],"repoSummary":"One sentence about the repo."}
 
 Rules:
-- Prefer small, concrete, testable tasks over large refactors
-- Each task must be completable in a single PR
-- Do not propose tasks that require external accounts or credentials
-- Focus on what would make the codebase more useful, reliable, or complete`;
+- priority must be exactly "high", "medium", or "low"
+- estimatedComplexity must be exactly "small", "medium", or "large"
+- Each task must be completable in one PR
+- Prefer concrete, testable improvements over large refactors
+- Your entire response must be valid JSON and nothing else`;
 
 export interface PlannedTask {
   id: string;
@@ -70,7 +56,7 @@ export class PlannerAgent {
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: `Analyze this codebase and propose the 3 most valuable next tasks:\n\n${sections}` },
         ],
-        maxTokens: 1024,
+        maxTokens: 2048,
       }),
     );
 

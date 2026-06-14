@@ -1,6 +1,7 @@
 import { getDb } from '@consensus/db';
 import { permissionRules, permissionRequests } from './schema.js';
 import { and, eq } from 'drizzle-orm';
+import { createHash } from 'node:crypto';
 import type { AgentRole } from '@consensus/shared-types';
 import { v4 as uuidv4 } from 'uuid';
 import { auditLog } from '@consensus/audit-log';
@@ -60,9 +61,13 @@ export class PermissionEngine {
     operation: string,
     rationale: string,
     projectId: string,
+    toolInput?: unknown,
   ): Promise<{ requestId: string }> {
     const db = getDb();
     const id = uuidv4();
+    const toolInputHash = toolInput !== undefined
+      ? createHash('sha256').update(JSON.stringify(toolInput)).digest('hex')
+      : null;
     await db.insert(permissionRequests).values({
       id,
       projectId,
@@ -71,6 +76,8 @@ export class PermissionEngine {
       operation,
       rationale,
       status: 'pending',
+      toolInputHash,
+      consumed: false,
     });
     this.onApprovalRequest?.(projectId, id, { agentRole, tool, operation, rationale });
 
@@ -121,11 +128,23 @@ export class PermissionEngine {
     return rows[0] ?? null;
   }
 
-  /** Returns true if there is at least one approved permission request
-   *  for the given (projectId, tool, operation) combination.
-   *  Used by agent.useTool() to allow retries after human approval. */
-  async checkApproved(projectId: string, tool: string, operation: string): Promise<boolean> {
+  /**
+   * Returns true if there is an approved, unconsumed permission request that
+   * matches (projectId, tool, operation) AND the SHA-256 of the exact tool
+   * input being executed. Marks the request consumed so approvals cannot be
+   * replayed for different inputs or reused across calls.
+   */
+  async checkApproved(
+    projectId: string,
+    tool: string,
+    operation: string,
+    toolInput?: unknown,
+  ): Promise<boolean> {
     const db = getDb();
+    const inputHash = toolInput !== undefined
+      ? createHash('sha256').update(JSON.stringify(toolInput)).digest('hex')
+      : null;
+
     const rows = await db
       .select()
       .from(permissionRequests)
@@ -135,10 +154,24 @@ export class PermissionEngine {
           eq(permissionRequests.tool, tool),
           eq(permissionRequests.operation, operation),
           eq(permissionRequests.status, 'approved'),
+          eq(permissionRequests.consumed, false),
         )
       )
       .limit(1);
-    return rows.length > 0;
+
+    if (rows.length === 0) return false;
+
+    const row = rows[0];
+    // If the approval was bound to a specific input hash, it must match exactly.
+    if (row.toolInputHash !== null && row.toolInputHash !== inputHash) return false;
+
+    // Mark consumed — this approval cannot be reused.
+    await db
+      .update(permissionRequests)
+      .set({ consumed: true })
+      .where(eq(permissionRequests.id, row.id));
+
+    return true;
   }
 
   async grantRule(projectId: string, rule: PermissionRule): Promise<void> {

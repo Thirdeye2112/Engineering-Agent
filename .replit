@@ -1,0 +1,22 @@
+run = "pnpm self-direct"
+entrypoint = "packages/pilot/src/self-direct.ts"
+
+[nix]
+channel = "stable-24_05"
+
+[deployment]
+run = ["sh", "-c", "pnpm self-direct"]
+deploymentTarget = "cloudrun"
+
+[env]
+# Replit injects these automatically when the Anthropic AI integration is enabled:
+#   AI_INTEGRATIONS_ANTHROPIC_API_KEY
+#   AI_INTEGRATIONS_ANTHROPIC_BASE_URL
+# The following must be set as Replit Secrets (not here):
+#   DATABASE_URL        — your Neon/Supabase/Postgres connection string
+#   GITHUB_TOKEN        — fine-grained token with repo read+write on GITHUB_REPO
+#   GITHUB_REPO         — e.g. "thirdeye2112/engineering-agent"
+
+[[ports]]
+localPort = 3000
+externalPort = 80

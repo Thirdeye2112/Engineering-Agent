@@ -22,6 +22,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const tasksArg = args.indexOf('--tasks');
 const maxTasks = tasksArg !== -1 ? parseInt(args[tasksArg + 1] ?? '5', 10) : null;
+const spendArg = args.indexOf('--max-spend');
+const maxSpendUsd = spendArg !== -1 ? parseFloat(args[spendArg + 1] ?? '5') : undefined;
 const dryRun = args.includes('--dry');
 const GITHUB_REPO = process.env.GITHUB_REPO ?? '';
 const SANDBOX_ROOT = path.resolve(__dirname, '../fixture');
@@ -76,6 +78,7 @@ async function main() {
   console.log('╚════════════════════════════════════════════════════════╝\n');
   console.log(`  Repo    : ${GITHUB_REPO || '(not configured)'}`);
   console.log(`  Target  : ${maxTasks ? `${maxTasks} PRs` : 'unlimited'}`);
+  console.log(`  Spend   : ${maxSpendUsd !== undefined ? `$${maxSpendUsd} cap` : 'no cap'}`);
   console.log(`  Mode    : ${dryRun ? 'dry-run (plan only)' : 'autonomous'}\n`);
 
   if (!checkPrereqs()) process.exit(1);
@@ -86,6 +89,7 @@ async function main() {
 
   const loop = new AutoLoop({
     maxTasks: maxTasks ?? undefined,
+    maxSpendUsd,
     repoFullName: GITHUB_REPO,
     sandboxRoot: SANDBOX_ROOT,
     onEvent: (ev) => {
@@ -105,6 +109,7 @@ async function main() {
   console.log('\n  Summary:');
   console.log(`    PRs opened : ${result.completed}`);
   console.log(`    Failed     : ${result.failed}`);
+  console.log(`    Spend      : $${result.totalSpendUsd.toFixed(4)}`);
   if (result.prUrls.length > 0) {
     console.log('    PR URLs:');
     for (const url of result.prUrls) console.log(`      • ${url}`);

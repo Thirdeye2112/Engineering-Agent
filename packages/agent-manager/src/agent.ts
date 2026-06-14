@@ -147,10 +147,7 @@ export class Agent {
     let raw = await this.call(systemPrompt, userMessage);
     let response = AgentResponseSchema.parse(parseJSON<unknown>(raw, 'implementation response'));
 
-    for (let iteration = 0; iteration < maxIterations; iteration++) {
-      if (response.status !== 'in_progress' || response.toolCalls.length === 0) break;
-
-      // Execute all tool calls in this iteration
+    const executeStep = async (iter: number): Promise<ImplementationStep> => {
       const toolResults: ImplementationStep['toolResults'] = [];
       for (const tc of response.toolCalls) {
         const tool = toolMap.get(tc.tool);
@@ -161,33 +158,38 @@ export class Agent {
         const result = await this.useTool(tool, tc, tc.operation as string);
         toolResults.push({ tool: tc.tool, success: result.success, output: result.output, error: result.error });
       }
+      return { iteration: iter, narrative: response.narrative, toolCalls: response.toolCalls, toolResults };
+    };
 
-      steps.push({ iteration, narrative: response.narrative, toolCalls: response.toolCalls, toolResults });
+    for (let iteration = 0; iteration < maxIterations; iteration++) {
+      // Always execute pending tool calls — even on status=complete, so open_pr
+      // at the end of a task is never silently dropped at the iteration cap.
+      if (response.toolCalls.length === 0) break;
 
-      // Feed results back to agent
+      const step = await executeStep(iteration);
+      steps.push(step);
+
+      // If the agent is done or hit a blocking state, stop here.
+      if (response.status !== 'in_progress') break;
+
+      // Feed results back to agent and get next response.
       const resultMsg = buildToolResultMessage(
         response.toolCalls.map((tc, i) => ({
           tool: tc.tool,
           operation: tc.operation as string,
-          success: toolResults[i].success,
-          output: toolResults[i].output,
-          error: toolResults[i].error,
+          success: step.toolResults[i].success,
+          output: step.toolResults[i].output,
+          error: step.toolResults[i].error,
         })),
       );
       raw = await this.call(systemPrompt, resultMsg);
       response = AgentResponseSchema.parse(parseJSON<unknown>(raw, 'implementation response'));
     }
 
-    // Capture final step if it has tool calls (e.g. open_pr on last iteration)
-    if (response.toolCalls.length > 0) {
-      const toolResults: ImplementationStep['toolResults'] = [];
-      for (const tc of response.toolCalls) {
-        const tool = toolMap.get(tc.tool);
-        if (!tool) { toolResults.push({ tool: tc.tool, success: false, output: null, error: `Unknown tool: ${tc.tool}` }); continue; }
-        const result = await this.useTool(tool, tc, tc.operation as string);
-        toolResults.push({ tool: tc.tool, success: result.success, output: result.output, error: result.error });
-      }
-      steps.push({ iteration: steps.length, narrative: response.narrative, toolCalls: response.toolCalls, toolResults });
+    // If the loop hit maxIterations and the final response still has tool calls
+    // (e.g. open_pr), execute them now so PRs aren't silently lost.
+    if (response.toolCalls.length > 0 && steps[steps.length - 1]?.toolCalls !== response.toolCalls) {
+      steps.push(await executeStep(steps.length));
     }
 
     return { steps, finalResponse: response };
@@ -210,39 +212,57 @@ export class Agent {
   async useTool(tool: ITool, input: unknown, operation = 'execute'): Promise<ToolResult> {
     const permLevel = this.config.permissionLevel ?? 'read';
     const projectId = this.config.deliberationId;
-    const emit = (actionType: string, extra: Record<string, unknown> = {}) =>
+    // Audit is fail-closed: if we can't write to the audit log, the tool call
+    // must not proceed. Non-tool audit events (permission.evaluated etc.) are
+    // allowed to warn-only since they don't gatekeep execution.
+    const emitCritical = async (actionType: string, extra: Record<string, unknown> = {}) => {
+      await globalAuditLog.append({
+        projectId, actorType: 'agent', actorId: this.config.role,
+        actionType, toolName: tool.name, ...extra,
+      });
+    };
+    const emitWarn = (actionType: string, extra: Record<string, unknown> = {}) =>
       globalAuditLog.append({
         projectId, actorType: 'agent', actorId: this.config.role,
         actionType, toolName: tool.name, ...extra,
       }).catch(err => console.warn('[audit]', actionType, err));
 
-    // 1. Emit tool.requested
-    await emit('tool.requested', { inputSummary: summarise(input) });
+    // 1. Emit tool.requested — fail-closed: if audit is unavailable, abort.
+    try {
+      await emitCritical('tool.requested', { inputSummary: summarise(input) });
+    } catch (auditErr) {
+      return {
+        success: false, output: null,
+        error: `Audit log unavailable — tool call aborted: ${String(auditErr).slice(0, 200)}`,
+        metadata: { durationMs: 0 },
+      };
+    }
 
     // 2. Resolve gate policy for this operation — prefer context-aware override
     const gateCtx = { agentId: this.threadId, projectId };
     const gate = tool.getGate?.(operation, gateCtx) ?? tool.gates?.[operation] ?? 'approval_required';
 
     if (gate === 'always_deny') {
-      await emit('permission.evaluated', { outputSummary: 'always_deny', approvalStatus: 'denied' });
+      emitWarn('permission.evaluated', { outputSummary: 'always_deny', approvalStatus: 'denied' });
       const denied: ToolResult = { success: false, output: null, error: `Operation ${tool.name}.${operation} is always denied.`, metadata: { durationMs: 0 } };
-      await emit('tool.denied', { outputSummary: denied.error });
+      emitWarn('tool.denied', { outputSummary: denied.error });
       return denied;
     }
 
     // 3. For approval_required: check if already approved; if not, create request
     if (gate === 'approval_required') {
-      const alreadyApproved = await permissionEngine.checkApproved(projectId, tool.name, operation);
+      const alreadyApproved = await permissionEngine.checkApproved(projectId, tool.name, operation, input);
       if (!alreadyApproved) {
         // Check DB rules for a standing grant
         const perm = await permissionEngine.check(this.config.role, tool.name, operation, { projectId, input });
-        await emit('permission.evaluated', { outputSummary: perm.reason, approvalStatus: perm.allowed ? 'approved' : 'pending' });
+        emitWarn('permission.evaluated', { outputSummary: perm.reason, approvalStatus: perm.allowed ? 'approved' : 'pending' });
         if (!perm.allowed) {
-          // No standing rule — request human approval
+          // No standing rule — request human approval, binding to the exact tool input
           const { requestId } = await permissionEngine.requestApproval(
             this.config.role, tool.name, operation,
             `Agent ${this.config.role} wants to use ${tool.name}.${operation}`,
             projectId,
+            input,
           );
 
           // If approvalTimeoutMs is set, poll until the human resolves or timeout
@@ -257,10 +277,10 @@ export class Agent {
               if (req?.status === 'denied') break;
             }
             if (approved) {
-              await emit('permission.evaluated', { outputSummary: `approved by human (waited)`, approvalStatus: 'approved' });
+              emitWarn('permission.evaluated', { outputSummary: `approved by human (waited)`, approvalStatus: 'approved' });
               // Fall through to execute the tool below
             } else {
-              await emit('tool.denied', { outputSummary: `Timed out or denied: ${requestId}` });
+              emitWarn('tool.denied', { outputSummary: `Timed out or denied: ${requestId}` });
               return {
                 success: false, output: null,
                 error: `Approval denied or timed out for ${tool.name}.${operation}. Request ID: ${requestId}`,
@@ -269,7 +289,7 @@ export class Agent {
               };
             }
           } else {
-            await emit('tool.denied', { outputSummary: `Pending approval: ${requestId}` });
+            emitWarn('tool.denied', { outputSummary: `Pending approval: ${requestId}` });
             return {
               success: false, output: null,
               error: `Approval required for ${tool.name}.${operation}. Request ID: ${requestId}`,
@@ -280,11 +300,11 @@ export class Agent {
           }
         }
       } else {
-        await emit('permission.evaluated', { outputSummary: 'approved by prior human decision', approvalStatus: 'approved' });
+        emitWarn('permission.evaluated', { outputSummary: 'approved by prior human decision', approvalStatus: 'approved' });
       }
     } else {
       // auto_allow
-      await emit('permission.evaluated', { outputSummary: 'auto_allow', approvalStatus: 'not_required' });
+      emitWarn('permission.evaluated', { outputSummary: 'auto_allow', approvalStatus: 'not_required' });
     }
 
     const legacyAuditLog = this.config.auditLog ?? (async () => {});
@@ -306,14 +326,23 @@ export class Agent {
       { role: 'assistant', content: `[tool_result] success=${result.success} output=${safeOutput}${result.error ? ` error=${result.error}` : ''}` },
     );
 
-    // 5. Emit tool.executed or tool.failed
+    // 5. Emit tool.executed or tool.failed — fail-closed: the result must be
+    // recorded in the audit log; if it can't be, treat execution as failed.
     if (result.success) {
-      await emit('tool.executed', {
-        outputSummary: summarise(result.output),
-        approvalStatus: gate === 'auto_allow' ? 'not_required' : 'approved',
-      });
+      try {
+        await emitCritical('tool.executed', {
+          outputSummary: summarise(result.output),
+          approvalStatus: gate === 'auto_allow' ? 'not_required' : 'approved',
+        });
+      } catch (auditErr) {
+        return {
+          success: false, output: null,
+          error: `Audit log unavailable after tool execution — result discarded: ${String(auditErr).slice(0, 200)}`,
+          metadata: result.metadata,
+        };
+      }
     } else {
-      await emit('tool.failed', { outputSummary: result.error ?? 'unknown error' });
+      emitWarn('tool.failed', { outputSummary: result.error ?? 'unknown error' });
     }
 
     return result;

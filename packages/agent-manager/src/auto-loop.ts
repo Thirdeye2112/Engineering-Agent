@@ -17,6 +17,12 @@ import type { ProviderName, TierName } from '@consensus/shared-types';
 export interface AutoLoopConfig {
   /** How many tasks to complete before stopping. Default: unlimited (run forever). */
   maxTasks?: number | null;
+  /**
+   * Maximum total API spend in USD before the loop stops. Leave undefined to
+   * disable. Wire this up once provider cost tracking flows into AutoLoop.
+   * The field is read and enforced now — set it to prevent runaway spend.
+   */
+  maxSpendUsd?: number;
   /** Target repo full name e.g. "owner/repo" */
   repoFullName: string;
   /** Local checkout root for repo intelligence */
@@ -52,6 +58,7 @@ export interface AutoLoopResult {
   failed: number;
   prUrls: string[];
   stoppedReason: string;
+  totalSpendUsd: number;
 }
 
 export class AutoLoop {
@@ -59,6 +66,7 @@ export class AutoLoop {
   private completedTasks: string[] = [];
   private failedTasks: string[] = [];
   private prUrls: string[] = [];
+  private totalSpendUsd = 0;
 
   constructor(private config: AutoLoopConfig) {}
 
@@ -70,6 +78,7 @@ export class AutoLoop {
   async run(): Promise<AutoLoopResult> {
     const {
       maxTasks = null,
+      maxSpendUsd,
       repoFullName,
       sandboxRoot,
       provider: providerName = 'anthropic',
@@ -90,7 +99,11 @@ export class AutoLoop {
 
     let iteration = 0;
 
-    while (!this.stopped && (maxTasks === null || this.prUrls.length < maxTasks)) {
+    while (
+      !this.stopped &&
+      (maxTasks === null || this.prUrls.length < maxTasks) &&
+      (maxSpendUsd === undefined || this.totalSpendUsd < maxSpendUsd)
+    ) {
       iteration++;
       onEvent?.({ type: 'planning', iteration });
 
@@ -153,7 +166,7 @@ export class AutoLoop {
 
       // Step 3: PRWorkflow implements the selected task
       try {
-        const report = await (executeTaskFn
+        const report: { prUrl?: string; blockingObjections?: string[]; totalCostUsd?: number } = await (executeTaskFn
           ? executeTaskFn(selectedTask)
           : (async () => {
               const workflow = new PRWorkflow({
@@ -170,6 +183,9 @@ export class AutoLoop {
               });
               return workflow.run();
             })());
+
+        // Accumulate spend for cap enforcement.
+        if (report.totalCostUsd) this.totalSpendUsd += report.totalCostUsd;
 
         if (report.prUrl) {
           this.completedTasks.push(selectedTask.title);
@@ -191,7 +207,11 @@ export class AutoLoop {
       }
     }
 
-    const stoppedReason = this.stopped ? 'manual stop' : `reached ${maxTasks} completed tasks`;
+    const stoppedReason = this.stopped
+      ? 'manual stop'
+      : maxSpendUsd !== undefined && this.totalSpendUsd >= maxSpendUsd
+        ? `spend cap reached ($${this.totalSpendUsd.toFixed(4)} >= $${maxSpendUsd})`
+        : `reached ${maxTasks} completed tasks`;
     onEvent?.({ type: 'loop_stopped', reason: stoppedReason, completed: this.prUrls.length });
 
     return {
@@ -199,6 +219,7 @@ export class AutoLoop {
       failed: this.failedTasks.length,
       prUrls: this.prUrls,
       stoppedReason,
+      totalSpendUsd: this.totalSpendUsd,
     };
   }
 }
